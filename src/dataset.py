@@ -2,8 +2,8 @@ import numpy as np
 import rasterio
 import os
 from io_utils import read_csv_to_list
-from src.path_utils import get_files_with_matching_word
-from src.vegetation_indices import calculate_evi, calculate_gndvi, calculate_ndre,calculate_ndvi
+from path_utils import get_files_with_matching_word
+from vegetation_indices import calculate_evi, calculate_gndvi, calculate_ndre,calculate_ndvi
 
 id_idx = 1
 variety_idx = 3

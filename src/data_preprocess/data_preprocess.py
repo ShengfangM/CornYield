@@ -4,8 +4,8 @@ import rasterio
 
 from skimage.transform import resize
 from skimage import restoration
-from src.path_utils import get_files_by_suffix, get_subdirectories
-from src.io_utils import write_tiff
+from path_utils import get_files_by_suffix, get_subdirectories
+from io_utils import write_tiff
 from rasterio.transform import from_origin
 
 
