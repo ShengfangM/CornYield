@@ -104,7 +104,7 @@ def test_model(model, test_images, test_yields, test_indices, irrigate_data, sav
     save_result(test_yields, pred_validate, save_name )
     
     
-def train_model(model, train_images, train_yields, save_name, is_plot:bool = False):
+def train_model(model, train_images, train_yields, save_name:str = None, is_plot:bool = False):
     
     MEAN = np.nanmean(train_images,(0,2,3))
     STD = np.nanstd(train_images, (0,2,3))
