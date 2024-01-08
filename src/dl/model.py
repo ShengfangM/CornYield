@@ -97,63 +97,63 @@ class ResNetRegression(nn.Module):
         return x
             
             
-# # version 1
-# # modified ResNet34 model for regression
-# class ResNetFNN(nn.Module):
-#     def __init__(self, in_channel, num_metadata, num_features, resnet_name : str = 'resnet34'):
-#         super(ResNetFNN, self).__init__()
-#         if resnet_name == 'resnet18':
-#             self.resnet = models.resnet18(pretrained=True)
-#         elif resnet_name == 'resnet50':
-#             self.resnet = models.resnet50(pretrained=True)
-#         else:
-#             self.resnet = models.resnet34(pretrained=True)
-
-#         self.weight = self.resnet.conv1.weight.clone()
-#         self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
-#         with torch.no_grad():
-#             self.resnet.conv1.weight[:, :3] = self.weight
-#             for ii in range(3, in_channel):
-#                 self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
-#         # self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
-
-#         # self.resnet.fc = nn.Linear(512, 1)
-#         # self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features1)
-#         num_features2 = 64
-#         self.fc = nn.Linear(num_metadata, num_features2)
-
-#         self.fc2 = nn.Linear(self.resnet.fc.in_features+num_features2, num_features)
-
-#     def forward(self, img, metadata):
-#         # x = self.conv1(img)
-#         x = self.resnet.conv1(img)
-#         x = self.resnet.bn1(x)
-#         x = self.resnet.relu(x)
-#         x = self.resnet.maxpool(x)
-
-#         x = self.resnet.layer1(x)
-#         x = self.resnet.layer2(x)
-#         x = self.resnet.layer3(x)
-#         x = self.resnet.layer4(x)
-
-#         x = self.resnet.avgpool(x)
-#         x = x.view(x.size(0), -1)
-#         # x = self.resnet.fc(x)
-
-#         x2 = self.fc(metadata)
-
-#         x = torch.cat((x, x2), dim=1)
-#         x = x.view(x.size(0), -1)
-
-#         x = self.fc2(x)
-
-#         return x
-    
-# version 2            
+# version 1
 # modified ResNet34 model for regression
 class ResNetFNN(nn.Module):
     def __init__(self, in_channel, num_metadata, num_features, resnet_name : str = 'resnet34'):
         super(ResNetFNN, self).__init__()
+        if resnet_name == 'resnet18':
+            self.resnet = models.resnet18(pretrained=True)
+        elif resnet_name == 'resnet50':
+            self.resnet = models.resnet50(pretrained=True)
+        else:
+            self.resnet = models.resnet34(pretrained=True)
+
+        self.weight = self.resnet.conv1.weight.clone()
+        self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+        with torch.no_grad():
+            self.resnet.conv1.weight[:, :3] = self.weight
+            for ii in range(3, in_channel):
+                self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
+        # self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+
+        # self.resnet.fc = nn.Linear(512, 1)
+        # self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features1)
+        num_features2 = 64
+        self.fc = nn.Linear(num_metadata, num_features2)
+
+        self.fc2 = nn.Linear(self.resnet.fc.in_features+num_features2, num_features)
+
+    def forward(self, img, metadata):
+        # x = self.conv1(img)
+        x = self.resnet.conv1(img)
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+
+        x = self.resnet.layer1(x)
+        x = self.resnet.layer2(x)
+        x = self.resnet.layer3(x)
+        x = self.resnet.layer4(x)
+
+        x = self.resnet.avgpool(x)
+        x = x.view(x.size(0), -1)
+        # x = self.resnet.fc(x)
+
+        x2 = self.fc(metadata)
+
+        x = torch.cat((x, x2), dim=1)
+        x = x.view(x.size(0), -1)
+
+        x = self.fc2(x)
+
+        return x
+    
+# version 2            
+# modified ResNet34 model for regression
+class ResNetFNN_V2(nn.Module):
+    def __init__(self, in_channel, num_metadata, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetFNN_V2, self).__init__()
         if resnet_name == 'resnet18':
             self.resnet = models.resnet18(pretrained=True)
         elif resnet_name == 'resnet50':
@@ -200,7 +200,53 @@ class ResNetFNN(nn.Module):
         x = self.fc2(x)
 
         return x
-            
+ 
+# version 2            
+# modified ResNet34 model for regression
+class CustomModel(nn.Module):
+    def __init__(self, in_channel, num_metadata, num_features, resnet_name : str = 'resnet34'):
+        super(CustomModel, self).__init__()
+
+        # self.weight = self.resnet.conv1.weight.clone()
+        # self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+        # with torch.no_grad():
+        #     self.resnet.conv1.weight[:, :3] = self.weight
+        #     for ii in range(3, in_channel):
+        #         self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
+        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+        # self.resnet = ......
+
+        # self.resnet.fc = nn.Linear(512, 1)
+        # self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features1)
+        num_features2 = 64
+        self.fc = nn.Linear(num_metadata, num_features2)
+
+        self.fc2 = nn.Linear(self.resnet.fc.in_features+num_features2, num_features)
+
+    def forward(self, img, metadata):
+        x = self.conv1(img)
+        x = self.resnet.conv1(x)
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+
+        x = self.resnet.layer1(x)
+        x = self.resnet.layer2(x)
+        x = self.resnet.layer3(x)
+        x = self.resnet.layer4(x)
+
+        x = self.resnet.avgpool(x)
+        x = x.view(x.size(0), -1)
+        # x = self.resnet.fc(x)
+
+        x2 = self.fc(metadata)
+
+        x = torch.cat((x, x2), dim=1)
+        x = x.view(x.size(0), -1)
+
+        x = self.fc2(x)
+
+        return x
 # '''feature extractor'''
 # class EncoderCNN(nn.Module):
 #     def __init__(self, in_channel, num_features, resnet_name = 'resnet34'):

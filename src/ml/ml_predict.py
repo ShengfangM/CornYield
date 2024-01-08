@@ -5,7 +5,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn import model_selection
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -130,6 +130,7 @@ def plot_result_separate(y_test, y_pred, test_indices, irrigate_data,save_name):
     basename = os.path.basename(save_name)
     
     mse = mean_squared_error(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
     rmse = np.sqrt(mse)
     r2 = r2_score(y_test, y_pred)
     
@@ -171,7 +172,7 @@ def plot_result_separate(y_test, y_pred, test_indices, irrigate_data,save_name):
     # plt.show()
     plt.close()
     
-    print(save_name, f' r-squared = {r2}, rmse = {rmse}')
+    print(save_name, f' r-squared = {r2}, rmse = {rmse}, mae={mae}')
     
     
 def plot_result(y_test, y_pred, save_name):
