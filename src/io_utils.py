@@ -1,6 +1,7 @@
 import csv
 import rasterio
 
+
 def read_csv_to_list(csv_file, n_header : int =1, column_idx_list: list = None) -> list:
     data_list = []    
     with open(csv_file, 'r') as csvfile:
