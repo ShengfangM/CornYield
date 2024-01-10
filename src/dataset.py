@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import rasterio
 import os
 from io_utils import read_csv_to_list
@@ -21,16 +22,11 @@ IRRIGATE_IDS = {
     'Full':0,
     'Deficit ':1
 }
-import pandas as pd
 
 
-def get_filename_metadata(data_path:str, yield_file:str, key_word:str= 'Ref_filled.tif', 
+
+def get_imgfilelist_yield(data_path:str, yield_file:str, key_word:str= 'Ref_filled.tif', 
                                crop_type_select:list= None, irrigate_type_select: list = None):
-    
-    
-    
-    # yield_dict = {data[id_idx]:[float(data[yield_idx]), data[variety_idx], 
-    #                             data[irrigate_idx]] for data in yield_list}
     
     data_files = get_files_with_matching_word(data_path, key_word)
     data_id_list = [os.path.basename(file_name)[:12] for file_name in data_files]
@@ -43,84 +39,44 @@ def get_filename_metadata(data_path:str, yield_file:str, key_word:str= 'Ref_fill
 
     if crop_type_select:
         yield_pf = yield_pf[yield_pf['Variety'].isin(crop_type_select)]
+        indices = yield_pf.index.tolist()
+        data_files = [data_files[i] for i in indices]
 
     if irrigate_type_select:
-        yield_pf = yield_pf[yield_pf['Variety'].isin(irrigate_type_select)]
+        yield_pf = yield_pf[yield_pf['Irrigation'].isin(irrigate_type_select)]
+        indices = yield_pf.index.tolist()
+        data_files = [data_files[i] for i in indices]
 
     return data_files, yield_pf
 
 
-    # crop_files = []
-    # crop_yields = []
-    # irrigate_type = []    
-    
-    # if crop_type_select:
-    #     for data_file in data_files:
-    #         file_name = os.path.basename(data_file)
-    #         file_id = file_name[:12]
-    #         for crop_type in crop_type_select:
-    #             if yield_dict[file_id][1] == CROP_TYPE[crop_type.lower()]:
-    #                 crop_files.append(data_file)
-    #                 crop_yields.append(yield_dict[file_id][0])
-    #                 irrigate_type.append(1) if yield_dict[file_id][2] == 'Deficit ' else irrigate_type.append(0)
-    #                 break
-        
-    # else:
-    #     crop_files = data_files
-    #     crop_yields, irrigate_type = get_ordered_yields_from_filelist(yield_dict, data_files)
-        
-    # # for irrigate in irrigate_type_select:
-    # #     irrigate_indices = np.where(IRRIGATE_IDS[irrigate])
-        
-    # return crop_files, crop_yields, irrigate_type
+def create_metadata(yield_pf, weather_file, doy):
 
+    weather_pf = pd.read_excel(weather_file,sheet_name=1, header=[0,1,3])
+    # header_name = weather_pf.columns
+    # selected_rows = weather_pf[(weather_pf[header_name[-1]] > doy-6) & (weather_pf[header_name[-1]] < doy+6)]
+    weather_pf = pd.read_excel(weather_file,sheet_name=1, header=[0,1,3])
+    weather_pf = weather_pf.dropna()
 
+    selected_rows = weather_pf[(weather_pf.iloc[:,-1] > doy-6) & (weather_pf.iloc[:,-1]  < doy+6) ]
 
-def get_ordered_yields_from_filelist(yield_dict, data_file_list, yield_idx = 6):
-    
-    ordered_yields = []
-    irrigate_type = []
-    for i, filepath in enumerate(data_file_list):
-        file_name = os.path.basename(filepath)
-        file_id = file_name[:12]
-        ordered_yields.append(yield_dict[file_id][0])
-        irrigate_type.append(1) if yield_dict[file_id][2] == 'Deficit ' else irrigate_type.append(0)
+    air_temperature = selected_rows.iloc[:,2].mean()
+    precipitation = selected_rows.iloc[:,9].mean()
+    soil_temperature = selected_rows.iloc[:,10].mean()
+    soil_temperature2 = selected_rows.iloc[:,11].mean()
 
-    return ordered_yields, irrigate_type
+    metadata = pd.DataFrame(index=range(len(yield_pf)))
+    metadata['Variety'] = yield_pf['Variety_int']/2
+    metadata['Irrigation'] = yield_pf['Irrigation_int']/1
+    metadata['DOY'] = doy / 366
+    metadata['Month'] = (doy / 30)/12
+    metadata['Stage'] = (doy/30 - 5)/5
+    metadata['air_temperature'] = air_temperature
+    metadata['precipitation'] = precipitation
+    metadata['soil_temperature'] = soil_temperature
+    metadata['soil_temperature2'] = soil_temperature2
+    return metadata
 
-
-def select_data_and_yield_list(data_path:str, yield_file:str, key_word:str= 'Ref_filled.tif', 
-                               crop_type_select:list= None, irrigate_type_select: list = None):
-  
-    yield_list = read_csv_to_list(yield_file)
-    yield_dict = {data[id_idx]:[float(data[yield_idx]), data[variety_idx], 
-                                data[irrigate_idx]] for data in yield_list}
-    
-    data_files = get_files_with_matching_word(data_path, key_word)
-    crop_files = []
-    crop_yields = []
-    irrigate_type = []    
-    
-    if crop_type_select:
-        for data_file in data_files:
-            file_name = os.path.basename(data_file)
-            file_id = file_name[:12]
-            for crop_type in crop_type_select:
-                if yield_dict[file_id][1] == CROP_TYPE[crop_type.lower()]:
-                    crop_files.append(data_file)
-                    crop_yields.append(yield_dict[file_id][0])
-                    irrigate_type.append(1) if yield_dict[file_id][2] == 'Deficit ' else irrigate_type.append(0)
-                    break
-        
-    else:
-        crop_files = data_files
-        crop_yields, irrigate_type = get_ordered_yields_from_filelist(yield_dict, data_files)
-        
-    # for irrigate in irrigate_type_select:
-    #     irrigate_indices = np.where(IRRIGATE_IDS[irrigate])
-        
-    return crop_files, crop_yields, irrigate_type
-    
 
 def read_img(img_file, VI_list = None, suffix_list = None, is_vi_only:bool = False):
     
@@ -178,90 +134,48 @@ def get_ml_image(img_list, VI_list = None, suffix_list = None,
 
 
 
-# def get_data_pioneer_indexed(file_paths, yield_dict, pioneer_deficit_id, pioneer_full_id):
-#     all_dataset = []
-#     all_yield = []
-#     pioneer_deficit_idx_list = []
-#     pioneer_full_idx_list = []
+def get_ordered_yields_from_filelist(yield_dict, data_file_list, yield_idx = 6):
     
-#     for i, filepath in enumerate(file_paths):
-#         file_name = os.path.basename(filepath)
-#         file_id = file_name[:12]
-#         src = rasterio.open(filepath)
-#         array = src.read()
-#         all_dataset.append(array)
-#         all_yield.append(yield_dict[file_id])
+    ordered_yields = []
+    irrigate_type = []
+    for i, filepath in enumerate(data_file_list):
+        file_name = os.path.basename(filepath)
+        file_id = file_name[:12]
+        ordered_yields.append(yield_dict[file_id][0])
+        irrigate_type.append(1) if yield_dict[file_id][2] == 'Deficit ' else irrigate_type.append(0)
+
+    return ordered_yields, irrigate_type
+
+
+def select_data_and_yield_list(data_path:str, yield_file:str, key_word:str= 'Ref_filled.tif', 
+                               crop_type_select:list= None, irrigate_type_select: list = None):
+  
+    yield_list = read_csv_to_list(yield_file)
+    yield_dict = {data[id_idx]:[float(data[yield_idx]), data[variety_idx], 
+                                data[irrigate_idx]] for data in yield_list}
+    
+    data_files = get_files_with_matching_word(data_path, key_word)
+    crop_files = []
+    crop_yields = []
+    irrigate_type = []    
+    
+    if crop_type_select:
+        for data_file in data_files:
+            file_name = os.path.basename(data_file)
+            file_id = file_name[:12]
+            for crop_type in crop_type_select:
+                if yield_dict[file_id][1] == CROP_TYPE[crop_type.lower()]:
+                    crop_files.append(data_file)
+                    crop_yields.append(yield_dict[file_id][0])
+                    irrigate_type.append(1) if yield_dict[file_id][2] == 'Deficit ' else irrigate_type.append(0)
+                    break
         
-#         if file_id in pioneer_deficit_id:
-#             pioneer_deficit_idx_list.append(i)
+    else:
+        crop_files = data_files
+        crop_yields, irrigate_type = get_ordered_yields_from_filelist(yield_dict, data_files)
         
-#         elif file_id in pioneer_full_id:
-#             pioneer_full_idx_list.append(i)
-            
-#     return np.array(all_dataset), np.array(all_yield), np.array(pioneer_deficit_idx_list), np.array(pioneer_full_idx_list)
-
-
-# def select_data_and_yield_list(data_path, yield_file, key_word= 'Ref_filled.tif', 
-#                                selection = None):
-    
-#     yield_list = read_csv_to_list(yield_file)
-#     yield_dict = {data[id_idx]:[float(data[yield_idx]), data[variety_idx], data[irrigate_idx]] for data in yield_list}
-    
-#     data_files = get_files_with_matching_word(data_path, key_word)
-    
-#     if selection:
-#         select_files = []
-#         select_yields = []
-#         select_type = []
-#         if selection.lower() == 'pioneer':
-#             for data_file in data_files:
-#                 file_name = os.path.basename(data_file)
-#                 file_id = file_name[:12]
-#                 if yield_dict[file_id][1] == 'P9998':
-#                     select_files.append(data_file)
-#                     select_yields.append(yield_dict[file_id][0])
-#                     select_type.append(1) if yield_dict[file_id][2] == 'Deficit ' else select_type.append(0) 
-#         if selection.lower() == 'pioneer deficit':
-#             for data_file in data_files:
-#                 file_name = os.path.basename(data_file)
-#                 file_id = file_name[:12]
-#                 if yield_dict[file_id][1] == 'P9998' and yield_dict[file_id][2] == 'Deficit ':
-#                     select_files.append(data_file)
-#                     select_yields.append(yield_dict[file_id][0])   
-#                     select_type.append(1)        
-#         if selection.lower() == 'pioneer full':
-#             for data_file in data_files:
-#                 file_name = os.path.basename(data_file)
-#                 file_id = file_name[:12]
-                
-#                 if yield_dict[file_id][1] == 'P9998' and yield_dict[file_id][2] == 'Full':
-#                     select_files.append(data_file)
-#                     select_yields.append(yield_dict[file_id][0])
-#                     select_type.append(0)                
+    # for irrigate in irrigate_type_select:
+    #     irrigate_indices = np.where(IRRIGATE_IDS[irrigate])
         
-#         # select_files = []
-#         # select_yields = []
-
-#         # for data_file in data_files:
-#         #     file_name = os.path.basename(data_file)
-#         #     file_id = file_name[:12]
-#         #     yield_type = yield_dict[file_id][1]
-
-#         #     if selection == 'pioneer all':
-#         #         if yield_type == 'P9998':
-#         #             select_files.append(data_file)
-#         #             select_yields.append(yield_type)
-#         #     elif selection == 'pioneer deficit':
-#         #         if yield_type == 'P9998' and yield_dict[file_id][2] == 'Deficit ':
-#         #             select_files.append(data_file)
-#         #             select_yields.append(yield_type)
-#         #     elif selection == 'pioneer full':
-#         #         if yield_type == 'P9998' and yield_dict[file_id][2] == 'Full':
-#         #             select_files.append(data_file)
-#         #             select_yields.append(yield_type)
-#         return select_files, select_yields, select_type
-#     else:
-#         ordered_yield_list = get_ordered_yields_from_filelist(yield_list, data_files)
-#         return data_files, ordered_yield_list
-
-
+    return crop_files, crop_yields, irrigate_type
+    

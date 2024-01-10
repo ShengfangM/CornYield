@@ -68,18 +68,22 @@ class ResNetRegression(nn.Module):
         else:
             self.resnet = models.resnet34(pretrained=True)
 
-        # self.resnet = models.resnet18(pretrained=True)
-        self.weight = self.resnet.conv1.weight.clone()
-        self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
-        with torch.no_grad():
-            self.resnet.conv1.weight[:, :3] = self.weight
-            for ii in range(3, in_channel):
-                self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
-
+        # # self.resnet = models.resnet18(pretrained=True)
+        # self.weight = self.resnet.conv1.weight.clone()
+        # self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+        # with torch.no_grad():
+        #     self.resnet.conv1.weight[:, :3] = self.weight
+        #     for ii in range(3, in_channel):
+        #         self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
+            
+        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
         # self.resnet.fc = nn.Linear(512, 1)
         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features)
 
-    def forward(self, x):
+
+    def forward(self, img):
+        x = self.conv1(img)
+        
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
