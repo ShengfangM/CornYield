@@ -10,8 +10,8 @@ from dataset import get_imgfilelist_yield, select_data_and_yield_list, create_me
 
 from ml.ml_predict import plot_result_separate
 from dl.dl_dataset import CornDataset, MixedDataset
-from dl.model import ResNetRegression
-from dl.train import train_with_cross_validation, train, validate, data_transform
+from dl.model import ResNetRegression_V00, ResNetRegression_V10, ViTRegression_V0, EfficientNetRegression, ResNetRegression_V01
+from dl.train import train_with_cross_validation, train, validate, data_transform, data_resize, data_transform_vit
 from plot_utils import plot_distinct_yields
 
 
@@ -28,7 +28,7 @@ irrigate_var={
     1: 'Deficit'
 }
 
-def select_imglist_yield(yield_file, img_path, keyword, analyze_variety_id=2, analyze_irrigation_id=2):
+def select_imglist_yield(yield_file, img_path, keyword, analyze_variety_id=3, analyze_irrigation_id=2):
     '''get selected image files and yield data according to corn variety and irrigate type'''
 
     img_list, yield_pf = get_imgfilelist_yield(img_path, yield_file, keyword)
@@ -54,6 +54,10 @@ def get_train_test_img(img_list, yield_pf, train_col='TRAIN_75', VI_list=None, s
     train_indices = list(yield_pf[yield_pf[train_col] == 1].index)
     test_indices = list(yield_pf[yield_pf[train_col] == 0].index)
 
+    # ### vit
+    # train_val_dataset = CornDataset([img_list[i] for i in train_indices], [yield_list[i] for i in train_indices], transform=data_transform_vit())
+    # test_dataset = CornDataset([img_list[i] for i in test_indices], [yield_list[i] for i in test_indices], transform=data_resize())
+
     train_val_dataset = CornDataset([img_list[i] for i in train_indices], [yield_list[i] for i in train_indices], transform=data_transform())
     test_dataset = CornDataset([img_list[i] for i in test_indices], [yield_list[i] for i in test_indices])
 
@@ -66,17 +70,26 @@ def get_train_test_img_metadata(img_list, yield_pf, weather_file, train_col='TRA
     train_indices = list(yield_pf[yield_pf[train_col] == 1].index)
     test_indices = list(yield_pf[yield_pf[train_col] == 0].index)
     
-    doy_name = img_path[-20:-17]
-    doy=int(doy_name)
+    doy=int(img_path[-20:-17])
     metadata = create_metadata(yield_pf, weather_file, doy)
+
+    ### vit
+    # train_val_dataset = MixedDataset([img_list[i] for i in train_indices], [yield_list[i] for i in train_indices], metadata.loc[train_indices], VI_list=VI_list, suffix_list=suffix_list,  transform=data_transform_vit())
+    # test_dataset = MixedDataset([img_list[i] for i in test_indices], [yield_list[i] for i in test_indices], metadata.loc[test_indices], VI_list=VI_list, suffix_list=suffix_list,  transform=data_resize())
+
 
     train_val_dataset = MixedDataset([img_list[i] for i in train_indices], [yield_list[i] for i in train_indices], metadata.loc[train_indices], VI_list=VI_list, suffix_list=suffix_list,  transform=data_transform())
     test_dataset = MixedDataset([img_list[i] for i in test_indices], [yield_list[i] for i in test_indices], metadata.loc[test_indices], VI_list=VI_list, suffix_list=suffix_list)
 
+
     return yield_list,train_val_dataset, test_dataset, test_indices
 
 
-def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_test):
+def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_test, resname='resnet18'):
+    
+    seed = 39
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     
     selection = ['Pioneer'] # 
     # selection = 'Pioneer Deficit' 
@@ -98,32 +111,36 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         pioneer_yield_list, train_val_dataset, test_dataset, test_indices= get_train_test_img(img_list, yield_pf, train_col=train_col)
         # yield_file = 'D:/Corn_Yield/BL2022_Yld.csv'
         doy_name = img_path[-23:-17]
-        
 
         in_channel = 5
-        num_epochs = 120
+        num_epochs = 200
         batch_size = 32
 
         # Initialize a new model for each fold
-        resname='resnet18'
+        # resname='resnet34'
         # model = CNNRegression(in_channel)
-        model = ResNetRegression(in_channel, 1, resname)
+        # model = ResNetRegression_V10(in_channel, 1, resname)
+        model = ResNetRegression_V01(in_channel, 1, resname)
+        # model = ResNetRegression_V00(in_channel, 1, resname)
+        # model = ViTRegression_V0(in_channel)
+        # model = EfficientNetRegression(in_channel)
+        # model = ResNetRegression(in_channel, 1, resname)
         # model = EncoderCNN(in_channel, 1)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(device)
         model.to(device)
 
-
         criterion = torch.nn.MSELoss()  # Mean Squared Error loss function
         # optimizer = optim.Adam(list(conv.parameters()) + list(deconv.parameters()), lr=0.001)  # Adam optimizer
-        optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adam optimizer
+        lr = 0.00075
+        optimizer = optim.Adam(model.parameters(), lr=lr)  # Adam optimizer
 
         # optimizer.zero_grad()
-        model = train_with_cross_validation(model, train_val_dataset, batch_size, num_epochs, optimizer, criterion)
+        model, val_mse = train_with_cross_validation(model, train_val_dataset, batch_size, num_epochs, optimizer, criterion)
 
         if is_save_model:
-            model_name = "path/model_pioneer(nbands="+str(in_channel)+ ')_'+ model.__class__.__name__+ +resname+ '_'+ doy_name +"_Batch=" +str(batch_size) + "_state.pth"
+            model_name = "path/model_pioneer_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+resname+ "_Batch=" +str(batch_size) + "_lr=" +str(lr)+ "_state.pth"
             torch.save(model.state_dict(), model_name)
 
 
@@ -133,7 +150,7 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         name_tag = doy_name
         out_name = name_tag + ' ' + 'Pioneer' + ' ' 
         out_name = out_name + keyword[:-11] 
-        out_name = out_name + ' CNN '
+        out_name = out_name + ' Resnet18 '
 
         yield_data = np.array(pioneer_yield_list)
         test_irrigate_data = np.array(yield_pf[yield_pf[train_col] == 0]['Irrigation_int'])
@@ -147,12 +164,78 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
             'Irrigation_int':test_irrigate_data,
             'Vriaty_int':test_variety_data
         })
-        csv_file_path = out_name + '.csv'
+        csv_file_path = out_path+out_name + '.csv'
         result_df.to_csv(csv_file_path, index=False)
 
         title = name_tag + ' Pioneer ' + keyword[:-11].upper() + ' CNN'
-        plot_distinct_yields(np.array(test_truth), np.array(test_prediction), test_irrigate_data, test_variety_data, title, out_name)
+        plot_distinct_yields(np.array(test_truth), np.array(test_prediction), test_irrigate_data, test_variety_data, title, out_path+out_name)
 
+
+def predict_yield(yield_file, img_path, out_path, predict_model):
+    
+    seed = 39
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
+    selection = ['Pioneer'] # 
+    # selection = 'Pioneer Deficit' 
+    # selection = 'Pioneer Full'
+
+    # key_word_list = ['Ref_filled.tif', 'RGB_filled.tif']
+    key_word_list = ['Ref_filled.tif']
+    suffix_list_list = [[], ['LWIR_filled.tif']]
+
+    # suffix = ['base', 'lwir']
+    # suffix_list = ['LWIR_filled.tif']
+    # VI_list = ['ndvi', 'ndre', 'gndvi', 'evi']
+    VI_list = ['evi']
+    train_col='TRAIN_75'
+    for keyword in key_word_list:
+
+        img_list, yield_pf = select_imglist_yield(yield_file, img_path, keyword, analyze_variety_id=2, analyze_irrigation_id=2)
+
+        pioneer_yield_list, train_val_dataset, test_dataset, test_indices= get_train_test_img(img_list, yield_pf, train_col=train_col)
+        # yield_file = 'D:/Corn_Yield/BL2022_Yld.csv'
+        doy_name = img_path[-23:-17]
+
+        in_channel = 5
+        num_epochs = 200
+        batch_size = 32
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(device)
+
+        criterion = torch.nn.MSELoss()  # Mean Squared Error loss function
+        
+        # loaded_model = ResNetRegression_V01(in_channel, 1, resname)
+        # predict_model.load_state_dict(torch.load(model_dict))
+        predict_model.to(device)
+
+        test_accuracy, test_prediction = validate(predict_model, test_dataset, criterion, batch_size = batch_size, is_return_output = True)
+        print(f'validation mse is {np.sqrt(np.mean(test_accuracy))}')
+
+        name_tag = doy_name
+        out_name = name_tag + ' ' + 'Pioneer' + ' ' 
+        out_name = out_name + keyword[:-11] 
+        out_name = out_name + ' Resnet '
+
+        yield_data = np.array(pioneer_yield_list)
+        test_irrigate_data = np.array(yield_pf[yield_pf[train_col] == 0]['Irrigation_int'])
+        test_variety_data = np.array(yield_pf[yield_pf[train_col] == 0]['Variety_int'])
+
+        test_truth = yield_data[test_indices]
+
+        result_df=pd.DataFrame({
+            'Truth': np.array(test_truth), 
+            'Prediction':np.array(test_prediction),
+            'Irrigation_int':test_irrigate_data,
+            'Vriaty_int':test_variety_data
+        })
+        csv_file_path = out_path+out_name + '.csv'
+        result_df.to_csv(csv_file_path, index=False)
+
+        title = name_tag + ' Pioneer ' + keyword[:-11].upper() + ' CNN'
+        plot_distinct_yields(np.array(test_truth), np.array(test_prediction), test_irrigate_data, test_variety_data, title, out_path+out_name)
 
 
 def predict_yield_from_img_metadata(yield_file, img_path, weather_file, out_path, is_save_model, is_test):
@@ -180,6 +263,7 @@ def predict_yield_from_img_metadata(yield_file, img_path, weather_file, out_path
         
         yield_list, train_val_dataset, test_dataset, test_indices=get_train_test_img_metadata(img_list, yield_pf, weather_file, train_col=train_col)
 
+        doy_name = img_path[-23:-17]
         in_channel = 5
         num_epochs = 120
         batch_size = 32

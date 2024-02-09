@@ -1,15 +1,283 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms as transforms
+from torchvision import transforms
+from torchvision.models import ViT_B_16_Weights
 import torchvision.models as models
 import torch.optim as optim
 
+''' vision transformer for regression'''
+class ViTRegression_V0(nn.Module):
+    def __init__(self, num_in_channel, base_model_name = 'vit-base-patch16-224-in21k-finetuned-imagenet'):
+        super(ViTRegression_V0, self).__init__()
+        self.n_channel = num_in_channel
+        # self.vit = VisionTransformer.from_pretrained(base_model_name, num_channels=num_in_channel)
+        self.vit = models.vit_b_16(weights=ViT_B_16_Weights.DEFAULT)
+        # self.vit = models.vit_b_16()
+
+        # setup for two class classification
+        num_ftrs = self.vit.heads[-1].in_features
+        self.vit.heads[-1] = torch.nn.Linear(num_ftrs, 1)
+        # method 2: add another layer to 
+        
+        self.conv1 = nn.Conv2d(num_in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+        self.bn = nn.BatchNorm2d(3)
+        self.relu = nn.ReLU(inplace=True)
+            
+        # self.regression_head = nn.Linear(self.vit.head.in_features, 1)
+    def forward(self, x):
+        if self.n_channel:
+            x = self.conv1(x)
+            x = self.bn(x)
+            x = self.relu(x)
+        
+        x = self.vit(x)
+        # x = self.regression_head(x[:, 0])  # Only use the [CLS] token for regression
+        return x
+
+
+
+class EfficientNetRegression(nn.Module):
+    def __init__(self, input_channels=5, efficientnet_variant='efficientnet_v2_s'):
+        super(EfficientNetRegression, self).__init__()
+        
+        # Load the EfficientNet model with pre-trained weights
+        efficientnet = models.efficientnet_v2_s(weights=models.EfficientNet_V2_S_Weights.DEFAULT)
+
+        print(*list(efficientnet.children())[:-1])
+        
+        # Modify the input layer to accept 5 channels
+        efficientnet.Conv2dNormActivation[0] = nn.Conv2d(input_channels, 24,
+                                           kernel_size=3, stride=2, padding=1, bias=False)
+        # , 24, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False
+        # Replace the classifier with a custom one
+        efficientnet._fc = nn.Linear(efficientnet._fc.in_features, 1)
+
+        self.model = efficientnet
+
+    def forward(self, x):
+        return self.model(x)
+    
+# modified ResNet34 model for regression
+class ResNetRegression_V00(nn.Module):
+    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetRegression_V00, self).__init__()
+        if resnet_name == 'resnet18':
+            resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        elif resnet_name == 'resnet50':
+            resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        else:
+            resnet = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
+
+        if in_channel>3:
+            weight = resnet.conv1.weight.clone()
+            resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+            
+            with torch.no_grad():
+                resnet.conv1.weight[:, :3] = weight
+                for ii in range(3, in_channel):
+                    resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
+
+        self.features = nn.Sequential(*list(resnet.children())[:-1])  # Remove the last fully connected layer
+        # self.resnet.fc = nn.Linear(512, 1)
+        self.fc = nn.Linear(resnet.fc.in_features, num_features)
+
+
+    def forward(self, img):
+        # x = self.conv1(img)
+        x = self.features(img)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+            
 
 # modified ResNet34 model for regression
-class ResNetFeatures(nn.Module):
+class ResNetRegression_V01(nn.Module):
     def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
-        super(ResNetFeatures, self).__init__()
+        super(ResNetRegression_V01, self).__init__()
+        if resnet_name == 'resnet18':
+            self.resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        elif resnet_name == 'resnet50':
+            self.resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        else:
+            self.resnet = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
+
+        # # self.resnet = models.resnet18(pretrained=True)
+        self.weight = self.resnet.conv1.weight.clone()
+        self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+        with torch.no_grad():
+            self.resnet.conv1.weight[:, :3] = self.weight
+            for ii in range(3, in_channel):
+                self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
+            
+        # self.resnet.fc = nn.Linear(512, 1)
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features)
+
+
+    def forward(self, img):
+        # x = self.conv1(img)
+        
+        x = self.resnet.conv1(img)
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+
+        x = self.resnet.layer1(x)
+        x = self.resnet.layer2(x)
+        x = self.resnet.layer3(x)
+        x = self.resnet.layer4(x)
+
+        x = self.resnet.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.resnet.fc(x)
+
+        return x
+            
+
+
+# modified ResNet34 model for regression
+class ResNetRegression_V10(nn.Module):
+    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetRegression_V10, self).__init__()
+
+        self.in_channel = in_channel
+
+        if resnet_name == 'resnet18':
+            self.resnet = models.resnet18(pretrained=True)
+        elif resnet_name == 'resnet50':
+            self.resnet = models.resnet50(pretrained=True)
+        else:
+            self.resnet = models.resnet34(pretrained=True)
+   
+        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+        self.bn = nn.BatchNorm2d(3)
+        self.relu = nn.ReLU(inplace=True)
+        
+        self.features = nn.Sequential(*list(self.resnet.children())[:-1])  # Remove the last fully connected layer
+        
+        # self.resnet.fc = nn.Linear(512, 1)
+        self.fc = nn.Linear(self.resnet.fc.in_features, num_features)
+
+
+    def forward(self, x):
+
+        if self.in_channel >3:
+            x = self.conv1(x)
+            x = self.bn(x)
+            x = self.relu(x)
+        
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+            
+
+
+# modified ResNet34 model for regression
+class ResNetRegression_V11(nn.Module):
+    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetRegression_V11, self).__init__()
+
+        self.in_channel = in_channel
+
+        if resnet_name == 'resnet18':
+            self.resnet = models.resnet18(pretrained=True)
+        elif resnet_name == 'resnet50':
+            self.resnet = models.resnet50(pretrained=True)
+        else:
+            self.resnet = models.resnet34(pretrained=True)
+
+        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+        self.bn = nn.BatchNorm2d(3)
+        self.relu = nn.ReLU(inplace=True)
+        # self.resnet.fc = nn.Linear(512, 1)
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features)
+
+
+    def forward(self, x):
+
+        if self.in_channel >3:
+            x = self.conv1(x)
+            x = self.bn(x)
+            x = self.relu(x)
+        
+        x = self.resnet.conv1(x)
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+
+        x = self.resnet.layer1(x)
+        x = self.resnet.layer2(x)
+        x = self.resnet.layer3(x)
+        x = self.resnet.layer4(x)
+
+        x = self.resnet.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.resnet.fc(x)
+
+        return x
+    
+
+'''# extract features from CNN models''' 
+class ResNetFeatures_V00(nn.Module):
+    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetFeatures_V00, self).__init__()
+        if resnet_name == 'resnet18':
+            resnet = models.resnet18(pretrained=True)
+        elif resnet_name == 'resnet50':
+            resnet = models.resnet50(pretrained=True)
+        else:
+            resnet = models.resnet34(pretrained=True)
+
+        # method 1: change the first conv1 according to the in_channel
+        weight = resnet.conv1.weight.clone()
+        resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+        with torch.no_grad():
+            if in_channel>3:
+                resnet.conv1.weight[:, :3] = weight
+                for ii in range(3, in_channel):
+                    resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
+
+        # method 2: add another layer to 
+        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+
+        self.features = nn.Sequential(*list(resnet.children())[:-1])  # Remove the last fully connected layer
+        
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        # x = self.resnet.fc(x)
+        return x
+
+# extract features from CNN models by adding a conv layer to
+class ResNetFeatures_V10(nn.Module):
+    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetFeatures_V10, self).__init__()
+        if resnet_name == 'resnet18':
+            resnet = models.resnet18(pretrained=True)
+        elif resnet_name == 'resnet50':
+            resnet = models.resnet50(pretrained=True)
+        else:
+            resnet = models.resnet34(pretrained=True)
+
+        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
+        # self.relu
+
+        self.features = nn.Sequential(*list(resnet.children())[:-1])  # Remove the last fully connected layer
+        
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        # x = self.resnet.fc(x)
+        return x
+    
+
+# modified ResNet34 model for regression
+class ResNetFeatures_V01(nn.Module):
+    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
+        super(ResNetFeatures_V01, self).__init__()
         if resnet_name == 'resnet18':
             self.resnet = models.resnet18(pretrained=True)
         elif resnet_name == 'resnet50':
@@ -18,12 +286,13 @@ class ResNetFeatures(nn.Module):
             self.resnet = models.resnet34(pretrained=True)
 
         # self.resnet = models.resnet18(pretrained=True)
-        self.weight = self.resnet.conv1.weight.clone()
-        self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
-        with torch.no_grad():
-            self.resnet.conv1.weight[:, :3] = self.weight
-            for ii in range(3, in_channel):
-                self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
+        if in_channel>3:
+            self.weight = self.resnet.conv1.weight.clone()
+            self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+            with torch.no_grad():
+                self.resnet.conv1.weight[:, :3] = self.weight
+                for ii in range(3, in_channel):
+                    self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
 
         # self.resnet.fc = nn.Linear(512, 1)
         # self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features)
@@ -53,54 +322,7 @@ class NNRegression(nn.Module):
 
     def forward(self, x):        
         x = self.fc(x)
-        return x    
-
-
-
-# modified ResNet34 model for regression
-class ResNetRegression(nn.Module):
-    def __init__(self, in_channel, num_features, resnet_name : str = 'resnet34'):
-        super(ResNetRegression, self).__init__()
-        if resnet_name == 'resnet18':
-            self.resnet = models.resnet18(pretrained=True)
-        elif resnet_name == 'resnet50':
-            self.resnet = models.resnet50(pretrained=True)
-        else:
-            self.resnet = models.resnet34(pretrained=True)
-
-        # # self.resnet = models.resnet18(pretrained=True)
-        # self.weight = self.resnet.conv1.weight.clone()
-        # self.resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
-        # with torch.no_grad():
-        #     self.resnet.conv1.weight[:, :3] = self.weight
-        #     for ii in range(3, in_channel):
-        #         self.resnet.conv1.weight[:, ii] = self.resnet.conv1.weight[:, 2]
-            
-        self.conv1 = nn.Conv2d(in_channel, 3, kernel_size=1, stride=1, padding=0, bias=False) #Input to 3 channel 
-        # self.resnet.fc = nn.Linear(512, 1)
-        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_features)
-
-
-    def forward(self, img):
-        x = self.conv1(img)
-        
-        x = self.resnet.conv1(x)
-        x = self.resnet.bn1(x)
-        x = self.resnet.relu(x)
-        x = self.resnet.maxpool(x)
-
-        x = self.resnet.layer1(x)
-        x = self.resnet.layer2(x)
-        x = self.resnet.layer3(x)
-        x = self.resnet.layer4(x)
-
-        x = self.resnet.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.resnet.fc(x)
-
-        return x
-            
-            
+        return x                
 # version 1
 # modified ResNet34 model for regression
 class ResNetFNN(nn.Module):
@@ -459,9 +681,9 @@ class ResNet34Regression(nn.Module):
 class FullyConnectedNN(nn.Module):
     def __init__(self, input_size, hidden_size=0, num_classes=0):
         super(FullyConnectedNN, self).__init__()
-        self.fc1 = nn.Linear(input_size, 16*input_size)
+        self.fc1 = nn.Linear(input_size, 4*input_size)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(16*input_size, input_size)
+        self.fc2 = nn.Linear(4*input_size, input_size)
         self.fc3 = nn.Linear(input_size, 4096)
         self.fc4 = nn.Linear(4096, 512)
         self.fc5 = nn.Linear(512, 1)
