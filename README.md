@@ -1,4 +1,4 @@
-# CornYield
+# CornYield (Ongoing project)
 
 This repository is dedicated to analyzing the corn yield prediction results from existing machine learning models and constructing a high performance custom hybrid deep learning model for predicting corn yield.
 
