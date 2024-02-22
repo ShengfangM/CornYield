@@ -2,8 +2,9 @@
 from utils import train_test_split_indices
 import pandas as pd
 
-out_label_file = 'D:/Corn_Yield/BL2022_Yld_label.csv'
-yield_file = 'D:/Corn_Yield/BL2022_Yld.csv'
+# out_label_file = 'D:/Corn_Yield/BL2022_Yld_label.csv'
+yield_file = 'C:/Users/yutzhou/Desktop/Corn_Yield/BL2022_Yld_label.csv'
+out_label_file = 'C:/Users/yutzhou/Desktop/Corn_Yield/BL2022_Yld.csv'
 
 percentage_list=[0.15, 0.2, 0.25, 0.3, 0.35, 0.4]
 variety_list=['DKC 51-91', 'P9998', 'CH 192-10']

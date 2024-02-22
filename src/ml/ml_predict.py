@@ -11,7 +11,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.base import BaseEstimator, TransformerMixin
-# import xgboost as xgb
+import xgboost as xgb
 from matplotlib.font_manager import FontProperties
 
 import pickle
@@ -19,43 +19,106 @@ import pickle
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-    
 
-def ml_predict_yield(dataset, yield_data, irrigate_data, modelname, out_name, out_path: str):
+from dataset import get_ml_image    
+
+def prepare_train_test_data(img_list, yield_pf, metadata=None, train_col='TRAIN_75', 
+                            VI_list=None, suffix_list=None, vi_only=False):
     
-    original_indices = np.arange(len(yield_data))
-    train_images, test_images, train_yields, test_yields, train_indices, test_indices = train_test_split(
-    dataset, yield_data, original_indices, test_size=0.2, random_state=39)
+    yield_list = list(yield_pf['Yield_Bu_Ac'])
+    train_indices = list(yield_pf[yield_pf[train_col] == 1].index)
+    test_indices = list(yield_pf[yield_pf[train_col] == 0].index)
+
+    train_img_list = [img_list[i] for i in train_indices]
+    test_img_list = [img_list[i] for i in test_indices]
     
-    if modelname == 'Lasso':
-        model = Lasso(alpha=0.5)
-    elif modelname == 'LR':
+    train_images = get_ml_image(train_img_list, VI_list=VI_list, 
+                                suffix_list = suffix_list, is_vi_only=vi_only)
+    
+    test_images = get_ml_image(test_img_list, VI_list=VI_list, 
+                                suffix_list = suffix_list, is_vi_only=vi_only)
+    if metadata:
+        train_meta = [metadata[i] for i in train_indices]
+        test_meta = [metadata[i] for i in test_indices]
+        
+        train_images = [train_images, train_meta]
+        test_images = [test_images, test_meta]
+        
+        
+    
+    return train_images, test_images, [yield_list[i] for i in train_indices], [yield_list[i] for i in test_indices]
+    
+    
+def ml_predict_yield(train_images, train_yields, test_images, modelname, out_name, out_path: str, is_Meta = False):
+    
+    
+    if modelname.upper() == 'LASSO':
+        model = Lasso(alpha=0.3)
+    elif modelname.upper() == 'LR':
         model = LinearRegression()
-    elif modelname == 'RF':
-        model = RandomForestRegressor(n_estimators=120, max_depth=20, random_state=42)
-    elif modelname == 'GB':
+    elif modelname.upper() == 'RF':
+        model = RandomForestRegressor(n_estimators=150, max_depth=25, random_state=42)
+    elif modelname.upper() == 'GB':
         model = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
-    elif modelname == 'SVR':
+    elif modelname.upper() == 'SVR':
         model = LinearSVR()
-    # elif modelname == 'XGB':
-    #     model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
+    elif modelname.upper() == 'XGB':
+        model = xgb.XGBRegressor(n_estimators =150, max_depth=25,objective='reg:squarederror', random_state=42)
+    # xgb.XGBRegressor(objective='reg:squarederror', random_state=42))
     else:
         print('not support')
         
-    trained_model = train_model(model, train_images, train_yields, out_path+out_name+modelname)
+    if is_Meta:
+        trained_model = train_model_meta(model, train_images, train_yields, out_path+out_name+modelname)
+    else:
+        trained_model = train_model(model, train_images, train_yields, out_path+out_name+modelname)
+        
     
+    # model =  trained_model.steps[-1][1]
+    # if modelname.upper() == 'XGB':        
+    #     # Get feature importances
+    #     # importances = model.get_score(importance_type='weight')
+    #     importances = model.get_booster().get_score(importance_type='weight')
+
+    #     # Convert the dictionary of feature importances to a list of tuples
+    #     importances = [(int(k[1:]), v) for k, v in importances.items()]
+
+    #     # Sort feature importances in descending order
+    #     importances = sorted(importances, key=lambda x: x[1], reverse=True)
+
+    #     # Sort feature importances in descending order
+    #     # importances = sorted(importances.items(), key=lambda x: x[1], reverse=True)
+    #     # Print the feature ranking
+    #     print("Feature ranking:")
+    #     for f, importance in enumerate(importances):
+    #         print(f"{f + 1}. Feature {importance[0]} ({importance[1]})")
+            
+    # elif modelname.upper() == 'GB' or modelname.upper() == 'RF':
+    #     # Get feature importances
+    #     importances = model.feature_importances_
+    #     # Sort feature importances in descending order
+    #     indices = np.argsort(importances)[::-1]
+    #     # Print the feature ranking
+    #     print("Feature ranking:")
+    #     if is_Meta:
+    #         for f in range(train_images[0].shape[1]+len(train_images[1][0])):
+    #             print(f"{f + 1}. Feature {indices[f]} ({importances[indices[f]]})")
+    #     else: 
+    #         for f in range(train_images.shape[1]):
+    #             print(f"{f + 1}. Feature {indices[f]} ({importances[indices[f]]})")
+    
+    
+
     # Save the model to a file using pickle
+    # `model_file_name` is a variable that stores the file name and path where the trained model will
+    # be saved using the pickle module. The trained model is saved as a binary file with the extension
+    # `.pkl`.
     model_file_name = out_path+out_name+modelname+'.pkl'
     with open(model_file_name, 'wb') as model_file:
         pickle.dump(trained_model, model_file)
-    
-    test_model(trained_model, test_images, test_yields, test_indices, irrigate_data, out_path+out_name+modelname)
-    #     # predict
-    # pred_validate = trained_model.predict(test_images)
+        
+    return trained_model
 
-    # plot_result_separate(test_yields, pred_validate,test_indices, irrigate_data, out_path+out_name+modelname )
-    
-    
 class CustomScaler(BaseEstimator, TransformerMixin):
     def __init__(self,mean,std):
         self.mean = mean
@@ -70,40 +133,56 @@ class CustomScaler(BaseEstimator, TransformerMixin):
         # return (X-self.mean[None,:,None,None])/self.std[None,:,None,None] 
         return X
 
-
-# class CustomScaler(BaseEstimator, TransformerMixin):
-#     def __init__(self,mean,std):
-#         self.mean = mean
-#         self.std = std
-
-#     def fit(self, X, y=None):
-#         #self.mean = X.mean((0,2,3)) 
-#         #self.std = X.std((0,2,3))
-#         return self
-
-#     def transform(self, X, y=None):
-#         return (X-self.mean[None,:,None,None])/self.std[None,:,None,None] 
-    
-
 class FlattenTransformer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         return self
 
     def transform(self, X, y=None):
+        # use mean value of the image 
+        # X = np.nanmean(X,(2,3))
         return X.reshape((X.shape[0], -1))
+    
+    
+class DataProcesser(BaseEstimator, TransformerMixin):
+    
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        # use mean value of the image 
+        # mean_image = np.nanmean(X[0],(2,3))
+        # array_1 = mean_image.reshape((mean_image.shape[0], -1))
+        array_1 = X[0].reshape((X[0].shape[0], -1))
+        array_2 = X[1]
+        return  np.concatenate((array_1, np.array(array_2)),axis=1)
+        
+    
+def train_model_meta(model, train_images, train_yields, save_name:str = None, is_plot:bool = False):
+    
+    # MEAN = np.nanmean(train_images[0],(0,2,3))
+    # STD = np.nanstd(train_images[0], (0,2,3))
+    MEAN = 0 
+    STD = 0
+    print('model', model)
+    
+    pipe = Pipeline(steps=[("scaler", CustomScaler(MEAN,STD)),
+                    ("flatten", DataProcesser()),
+                    ("classifier", model )
+                    ])
+    pipe.fit(train_images,train_yields)
+
+    # predict train
+    pred_train = pipe.predict(train_images)
+    
+    if is_plot:
+        plot_result(train_yields, pred_train, save_name + ' Train')
+        save_result(train_yields, pred_train, save_name + ' Train')
+    
+    return pipe
+    
 
 
-def test_model(model, test_images, test_yields, test_indices, irrigate_data, save_name):
-    
-    # predict
-    pred_validate = model.predict(test_images)
-    
-    # plot_result(test_yields, pred_validate, save_name )
-    plot_result_separate(test_yields, pred_validate, test_indices, irrigate_data,save_name)
-    save_result(test_yields, pred_validate, save_name )
-    
-    
 def train_model(model, train_images, train_yields, save_name:str = None, is_plot:bool = False):
     
     MEAN = np.nanmean(train_images,(0,2,3))
@@ -123,6 +202,20 @@ def train_model(model, train_images, train_yields, save_name:str = None, is_plot
         save_result(train_yields, pred_train, save_name + ' Train')
     
     return pipe
+
+
+def test_model(model, test_images, test_yields, test_indices, irrigate_data, save_name):
+    
+    # predict
+    pred_validate = model.predict(test_images)
+    
+    # plot_result(test_yields, pred_validate, save_name )
+    plot_result_separate(test_yields, pred_validate, test_indices, irrigate_data,save_name)
+    save_result(test_yields, pred_validate, save_name )
+    
+    
+
+
 
 
 def plot_result_separate(y_test, y_pred, test_indices, irrigate_data,save_name):

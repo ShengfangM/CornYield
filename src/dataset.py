@@ -6,22 +6,8 @@ from io_utils import read_csv_to_list
 from path_utils import get_files_with_matching_word
 from vegetation_indices import calculate_evi, calculate_gndvi, calculate_ndre,calculate_ndvi
 
-id_idx = 1
-variety_idx = 3
-irrigate_idx = 4
-yield_idx = 6
-CROP_TYPE = {
-    'pioneer':'P9998'
-}
-CROP_Variety = {
-    'P9998': 2,
-    'CH 192-10':1,
-    'DKC 51-91':0
-}
-IRRIGATE_IDS = {
-    'Full':0,
-    'Deficit ':1
-}
+from config_constant import IRRIGATE_IDS, CROP_IDS, CROP_TYPE, \
+                            id_idx, variety_idx, irrigate_idx, yield_idx
 
 
 
@@ -35,7 +21,7 @@ def get_imgfilelist_yield(data_path:str, yield_file:str, key_word:str= 'Ref_fill
     yield_pf = pd.read_csv(yield_file)
     yield_pf = yield_pf.sort_values(by=['ID'], key=lambda x: x.map(sort_id_index))
     yield_pf['Irrigation_int'] = yield_pf['Irrigation'].map(IRRIGATE_IDS)
-    yield_pf['Variety_int'] = yield_pf['Variety'].map(CROP_Variety)
+    yield_pf['Variety_int'] = yield_pf['Variety'].map(CROP_IDS)
 
     if crop_type_select:
         yield_pf = yield_pf[yield_pf['Variety'].isin(crop_type_select)]
