@@ -32,6 +32,8 @@ class CornDataset(torch.utils.data.Dataset):
         corn_yield = self.yield_list[idx]
         corn_data = torch.from_numpy(read_img(self.file_list[idx], VI_list = self.VI_list, 
                             suffix_list = self.suffix_list))
+        
+        # corn_data = corn_data[2:,:,:]
                 
         if self.transform:
             corn_data = self.transform(corn_data)
