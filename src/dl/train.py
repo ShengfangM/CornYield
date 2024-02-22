@@ -7,11 +7,15 @@ import numpy as np
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def train_with_cross_validation(model, train_val_dataset:torch.utils.data.Dataset, batch_size, num_epochs, optimizer, criterion,
-                                n_split: int = 5, shuffle: bool=True, random_state: int = 39, dual_model:bool=False, model2=None, is_dual_data = False):
+                                n_split: int = 4, shuffle: bool=True, random_state: int = 39, dual_model:bool=False, model2=None, is_dual_data = False):
+    seed = 39
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
+    # kf = KFold(n_splits=4, shuffle=False)
+    kf = KFold(n_splits=4, shuffle=shuffle, random_state=random_state)
 
-    kf = KFold(n_splits=n_split, shuffle=shuffle, random_state=random_state)
-
-    val_accuracy =[]
+    val_accuracy_all =[]
 
     for train_indices, val_indices in kf.split(train_val_dataset):
         train_dataset = torch.utils.data.Subset(train_val_dataset, train_indices)
@@ -22,14 +26,20 @@ def train_with_cross_validation(model, train_val_dataset:torch.utils.data.Datase
         else:
             model = train(model, train_dataset, batch_size, num_epochs, optimizer, criterion,is_dual_data = is_dual_data)
             val_accuracy = validate(model, val_dataset,criterion, batch_size,is_dual_data = is_dual_data)
-        print(f'validation mse is {np.mean(val_accuracy)}')
+        val_accuracy_all.append(val_accuracy)
+        print(f'validation mse is {np.mean(val_accuracy_all)}')
+        print(f'All validation mse is {np.mean(val_accuracy)}')
 
-    return model
+    return model, val_accuracy_all
 
 
 
 
-def train(model, train_dataset, batch_size, num_epochs, optimizer, criterion, is_dual_data = False):          
+def train(model, train_dataset, batch_size, num_epochs, optimizer, criterion, is_dual_data = False):  
+    seed = 42
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+        
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
@@ -144,7 +154,38 @@ def data_transform():
     ])
 
 
+def data_transform_vit():
 
+    return transforms.Compose([
+        # NumpyArrayToTensor(),  # Custom transformation
+        # transforms.ToTensor(),
+        transforms.Resize((224,224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(degrees=30),
+        # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+        # transforms.RandomResizedCrop(size=(224, 224), scale=(0.8, 1.0)),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.406, 0.406], std=[0.229, 0.224, 0.225, 0.225, 0.225]),  # Example normalization values
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Example normalization values
+
+    ])
+
+
+def data_resize():
+
+    return transforms.Compose([
+        # NumpyArrayToTensor(),  # Custom transformation
+        # transforms.ToTensor(),
+        transforms.Resize((224,224))
+        # transforms.RandomHorizontalFlip(),
+        # transforms.RandomVerticalFlip(),
+        # transforms.RandomRotation(degrees=30),
+        # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+        # transforms.RandomResizedCrop(size=(224, 224), scale=(0.8, 1.0)),
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.406, 0.406], std=[0.229, 0.224, 0.225, 0.225, 0.225]),  # Example normalization values
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Example normalization values
+
+    ])
 
 def train_dual_models(model1, model2, train_dataset, batch_size, num_epochs, optimizer, criterion):          
 
