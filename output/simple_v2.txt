@@ -1,0 +1,111 @@
+
+Simple_V2
+cuda
+validation mse is 309.35976155598956
+All validation mse is 309.35976155598956
+validation mse is 333.74300416310626
+All validation mse is 358.12624677022296
+validation mse is 389.4739702012804
+All validation mse is 500.9359022776286
+validation mse is 363.62778703371686
+All validation mse is 286.0892375310262
+
+training time is  :  14917.430920600891
+
+validation mse is 17.924519284770746
+
+test time is  :  16.50293278694153
+
+../output/DOY186 Pioneer   Ref Resnet18   r-squared = 0.8633675501001699, rmse = 17.755191135129195, mae=13.256225165678288
+3
+cuda
+validation mse is 382.41794204711914
+All validation mse is 382.41794204711914
+validation mse is 364.1467695236206
+All validation mse is 345.87559700012207
+validation mse is 387.454283396403
+All validation mse is 434.0693111419678
+validation mse is 369.22331619262695
+All validation mse is 314.5304145812988
+
+training time is  :  10844.818711996078
+
+validation mse is 18.534284050602064
+
+test time is  :  15.7996985912323
+
+../output/DOY186 Pioneer   RGB Resnet18   r-squared = 0.8529933304338104, rmse = 18.41691753425819, mae=13.634252799532774
+
+
+
+validation mse is 553.9814929962158
+All validation mse is 553.9814929962158
+validation mse is 399.103476524353
+All validation mse is 244.22546005249023
+validation mse is 369.4582394493951
+All validation mse is 310.1677652994792
+validation mse is 330.23579446474713
+All validation mse is 212.56845951080322
+
+training time is  :  11933.649840593338
+
+validation mse is 14.833220752903191
+
+test time is  :  10.518242359161377
+
+../output/DOY197 Pioneer   Ref Resnet18   r-squared = 0.9031543355876862, rmse = 14.948186772418465, mae=11.212240863833085
+3
+cuda
+validation mse is 285.929607073466
+All validation mse is 285.929607073466
+validation mse is 251.7746376991272
+All validation mse is 217.61966832478842
+validation mse is 275.31212499406604
+All validation mse is 322.38709958394367
+validation mse is 259.0192217032115
+All validation mse is 210.1405118306478
+
+training time is  :  9036.052031993866
+
+validation mse is 15.586543786056986
+
+test time is  :  13.88484501838684
+
+../output/DOY197 Pioneer   RGB Resnet18   r-squared = 0.8933800699678393, rmse = 15.684389565315112, mae=12.02183960853218
+
+
+cuda
+validation mse is 215.5583372116089
+All validation mse is 215.5583372116089
+validation mse is 208.54275941848755
+All validation mse is 201.5271816253662
+validation mse is 230.84142674340143
+All validation mse is 275.4387613932292
+validation mse is 219.69277715682983
+All validation mse is 186.24682839711508
+
+training time is  :  12180.150736808777
+
+validation mse is 13.806258763612286
+
+test time is  :  6.866801500320435
+
+../output/DOY201 Pioneer   Ref Resnet18   r-squared = 0.9165471691555516, rmse = 13.87614919433576, mae=9.87457986927071
+3
+cuda
+validation mse is 281.16989580790204
+All validation mse is 281.16989580790204
+validation mse is 256.90965366363525
+All validation mse is 232.6494115193685
+validation mse is 279.85091548495825
+All validation mse is 325.7334391276042
+validation mse is 259.43141476313275
+All validation mse is 198.17291259765625
+
+training time is  :  7305.908199071884
+
+validation mse is 14.33587590757854
+
+test time is  :  6.582898139953613
+
+../output/DOY201 Pioneer   RGB Resnet18   r-squared = 0.9100035269323519, rmse = 14.409906704684545, mae=10.502518166204359

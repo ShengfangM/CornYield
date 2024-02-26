@@ -1,10 +1,15 @@
+import sys
+sys.path.append('C:/Zhou/Ma/Projects/CornYield/src')
+# os.chdir(parent_directory) 
+
 import numpy as np
 import os
 import rasterio
 
+
 from skimage.transform import resize
 from skimage import restoration
-from path_utils import get_files_by_suffix, get_subdirectories
+from path_utils import get_files_by_suffix, get_subdirectories, get_files_with_matching_word
 from io_utils import write_tiff
 from rasterio.transform import from_origin
 
@@ -34,6 +39,8 @@ def resize_image(img, target_height, target_width):
 def interpolate_images(img_path, new_height, new_width, suffix):
     
     file_list = get_files_by_suffix(img_path, suffix)
+    file_list = [filename for filename in file_list if 'RGB.tif' in filename]
+    
     in_path = os.path.dirname(img_path)
     in_subpath = os.path.basename(img_path)
     out_path = os.path.join(in_path + '_filled', in_subpath + '_filled')
@@ -55,12 +62,13 @@ def interpolate_images(img_path, new_height, new_width, suffix):
                          geotransform[3], new_pixel_height, geotransform[5])
         
         img_array = src.read().astype(np.float32)
+        img_array = img_array/255
         # 
 
         img_array[img_array<0] = np.nan
         resized_img = resize_image(img_array, new_height , new_width)
         
-        output_file = basename[:-4]+'_filled.tif'
+        output_file = basename[:-4]+'_filled2.tif'
         output_file = os.path.join(out_path, output_file)
         write_tiff(output_file, resized_img, src.crs, new_transform)
         
@@ -73,6 +81,8 @@ def interpolate_data_batch(img_path):
 
 
 if __name__ == "__main__":
-    img_path = 'C:/Users/yutzhou/Desktop/Corn_Yield/UAV_Data_Extracted'
-    interpolate_data_batch(img_path)
+    # img_path = 'C:/Users/yutzhou/Desktop/Corn_Yield/UAV_Data_Extracted'
+    # interpolate_data_batch(img_path)
+    path = 'C:/Users/yutzhou/Desktop/Corn_Yield/UAV_Data_Extracted/LIRF20220916_DOY259_extracted'
+    interpolate_images(path, 220, 55, 'tif')
     

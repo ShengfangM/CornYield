@@ -46,15 +46,31 @@ class ResNetFNNTranfomerBase(nn.Module):
         self.fc_metadata = nn.Linear(num_metadata, num_resnet_features)
         self.fc_combined = nn.Linear(num_resnet_features + num_resnet_features, num_features)
         self.fc = nn.Linear(num_resnet_features, num_features)
+        
+        self.num_heads = 8
 
     def forward(self, img, metadata):
         x_resnet = self.feature_extract(img)
         x_metadata = F.relu(self.fc_metadata(metadata))
+        # print(x_resnet.size(1))
+        # print(x_metadata.shape)
+        
+        # num_heads = 8
+        # heads_per_dim = 64
+        batch_size = x_resnet.size(0)
+        head_dim = 64
+        # embed_dim = x_resnet.size(2)
+        # head_dim = embed_dim // (self.num_heads * 3)
+        query = x_metadata.view(batch_size, -1, self.num_heads, head_dim).transpose(1, 2)
+        key = x_resnet.view(batch_size, -1, self.num_heads, head_dim).transpose(1, 2)
+        value = x_resnet.view(batch_size, -1, self.num_heads, head_dim).transpose(1, 2)
         # x_combined = torch.cat((x_resnet, x_metadata), dim=1)
         # x_combined = x_combined.view(x_combined.size(0), -1)
         # x_out = self.fc_combined(x_combined)
         with torch.backends.cuda.sdp_kernel(enable_math=False):
-            x_combined = F.scaled_dot_product_attention(x_metadata,x_resnet,x_resnet)
+            x_combined = F.scaled_dot_product_attention(query,key,value)
+        x_combined = x_combined.transpose(1, 2).view(batch_size, -1, self.num_heads * head_dim)
+        x_combined = x_combined.view(x_combined.size(0), -1)
         x_out = self.fc(x_combined)
         return x_out
     
@@ -523,6 +539,8 @@ class CNNRegression(nn.Module):
         self.fc1 = nn.Linear(64*6, 128)
         # self.fc2 = nn.Linear(4098, 1028)
         self.fc3 = nn.Linear(128, 1)
+        # Define the spatial pooling layers
+        self.pool1 = nn.AdaptiveMaxPool2d((1, 1))
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
@@ -540,6 +558,98 @@ class CNNRegression(nn.Module):
         return x
         
 
+class SpatialPyramidCNN(nn.Module):
+    def __init__(self, in_channel, num_classes):
+        super(SpatialPyramidCNN, self).__init__()
+        # Define the convolutional layers
+        self.conv1 = nn.Conv2d(in_channels=in_channel, out_channels=64, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding=1)
+        
+        # Define the fully connected layers
+        self.fc1 = nn.Linear(64 * 9+in_channel, 1)  # 13x13 is the output size after spatial pooling
+        
+        # Define the spatial pooling layers
+        self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
+        self.pool2 = nn.AdaptiveAvgPool2d((2, 4))
+        # self.pool3 = nn.AdaptiveMaxPool2d((2, 4))
+        
+    def forward(self, x):
+        # Apply convolutional layers
+        x1 = self.pool1(x)
+        
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        # Apply spatial pyramid pooling
+        x2 = self.pool1(x)
+        x3 = self.pool2(x)
+        
+        # Flatten the features
+        x1 = x1.view(x1.size(0), -1)
+        x2 = x2.view(x2.size(0), -1)
+        x3 = x3.view(x3.size(0), -1)
+        
+        # Concatenate the pooled features
+        x = torch.cat((x1, x2, x3), dim=1)
+        # Flatten the features
+        x = x.view(x.size(0), -1)
+        
+        return self.fc1(x)
+    
+    
+class SpatialPyramidCNN_V2(nn.Module):
+    def __init__(self, in_channel, num_classes):
+        super(SpatialPyramidCNN_V2, self).__init__()
+        
+        resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        # self.resnet = models.resnet18(pretrained=True)
+        if in_channel>3:
+            weight = resnet.conv1.weight.clone()
+            resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+            with torch.no_grad():
+                resnet.conv1.weight[:, :3] = weight
+                for ii in range(3, in_channel):
+                    resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
+        self.features = resnet
+        # self.features = nn.Sequential(*list(resnet.children())[:-1])
+        
+        
+        # Define the fully connected layers
+        self.fc1 = nn.Linear(64 * 1+in_channel, 1)  # 13x13 is the output size after spatial pooling
+        
+        # Define the spatial pooling layers
+        self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
+        # self.pool2 = nn.AdaptiveAvgPool2d((2, 4))
+        # self.pool3 = nn.AdaptiveMaxPool2d((2, 4))
+        
+    def forward(self, x):
+        # Apply convolutional layers
+        x1 = self.pool1(x)
+        
+        x = self.features.conv1(x)
+        x = self.features.bn1(x)
+        x = self.features.relu(x)
+        x = self.features.maxpool(x)
+
+        x = self.features.layer1(x)
+        
+        # Apply spatial pyramid pooling
+        x2 = self.pool1(x)
+        # x3 = self.pool2(x)
+        
+        # Flatten the features
+        x1 = x1.view(x1.size(0), -1)
+        x2 = x2.view(x2.size(0), -1)
+        # x3 = x3.view(x3.size(0), -1)
+        
+        # Concatenate the pooled features
+        x = torch.cat((x1, x2), dim=1)
+        # Flatten the features
+        x = x.view(x.size(0), -1)
+        
+        return self.fc1(x)
+    
 '''NN regression'''
 class FullyConnectedNN(nn.Module):
     def __init__(self, input_size, hidden_size=0, num_classes=0):

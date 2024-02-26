@@ -1,5 +1,14 @@
 import os
 
+def check_path_exist(path_check:str):
+    if not os.path.exists(path_check):
+    # If it doesn't exist, create the directory and any missing parent directories
+        os.makedirs(path_check)
+        print(f"Directory '{path_check}' created successfully.")
+    else:
+        print(f"Directory '{path_check}' already exists.")
+        
+        
 def get_files_with_matching_word(file_path: str, matching_word: str) -> list:
     files_list = []
 
