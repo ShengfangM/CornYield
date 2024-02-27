@@ -20,10 +20,11 @@ irrigate_var={
 
 
 def plot_distinct_yields(y_test, y_pred, irrigate_data, variety_data, title, save_name):
-        
+    
+    value_range = [4,19]   
     accurate_metric = []
     
-    x = np.arange(50,300)
+    x = np.arange(value_range[0], value_range[1]+1)
     plt.plot(x, x, color = 'k', ls='--', alpha=0.7, linewidth=1.25)
     
     color_list=['#2ca02c', '#bcbd22', 'r']
@@ -33,6 +34,7 @@ def plot_distinct_yields(y_test, y_pred, irrigate_data, variety_data, title, sav
     for j in np.sort(np.unique(variety_data)):
         marker=marker_list[j]
         for i in np.sort(np.unique(irrigate_data)):
+            marker=marker_list[i+1]
             color = color_list[i]
         # marker=marker_list[i]
             # color = color_list[j]
@@ -59,20 +61,25 @@ def plot_distinct_yields(y_test, y_pred, irrigate_data, variety_data, title, sav
     mae = mean_absolute_error(y_test, y_pred)
     rmse = np.sqrt(mse)
     r2 = r2_score(y_test, y_pred)
+    mare = np.mean(np.abs((y_test - y_pred)/y_test))
     accurate_metric.append(['all', rmse, mae, r2, np.mean(y_test), 100*rmse/np.mean(y_test), 100*mae/np.mean(y_test)])
     
-    plt.xlim([50,300])
-    plt.ylim([50,300])
+    plt.xlim(value_range)
+    plt.ylim(value_range)
     plt.xticks(fontname='Times New Roman', size=10)
     plt.yticks(fontname='Times New Roman', size=10)
-    plt.xlabel('True Yield (Bu/Ac)', fontname = 'Times New Roman', fontsize = 12)
-    plt.ylabel('Predicted Yield (Bu/Ac)', fontname = 'Times New Roman', fontsize = 12)
+    plt.xlabel('Ground Measured Yield (ton/ha)', fontname = 'Times New Roman', fontsize = 12)
+    plt.ylabel('Predicted Yield (ton/ha)', fontname = 'Times New Roman', fontsize = 12)
 
     plt.title(title, fontname = 'Times New Roman', fontsize = 14)
 
-    plt.text(55, 288, f'R-squared = {round(r2,2)}', 
+    plt.text(value_range[0]*1.1, value_range[1]*0.96, f'R-squared = {round(r2,2)}', 
              fontname = 'Times New Roman', fontsize = 11)
-    plt.text(55, 275, f'RMSE = {round(rmse, 2)} (Bu/Ac)',  
+    plt.text(value_range[0]*1.1, value_range[1]*0.92, f'RMSE = {round(rmse, 2)}',  
+             fontname = 'Times New Roman', fontsize = 11)
+    # plt.text(4500, 17300, f'MAE = {round(mae, 2)} (Kg/Ha)',  
+    #          fontname = 'Times New Roman', fontsize = 11)
+    plt.text(value_range[0]*1.1, value_range[1]*0.88, f'MARE = {round(mare, 2)}',  
              fontname = 'Times New Roman', fontsize = 11)
     
     font_props = FontProperties(family='Times New Roman', size=11)
@@ -90,4 +97,4 @@ def plot_distinct_yields(y_test, y_pred, irrigate_data, variety_data, title, sav
     # Save DataFrame to CSV
     df.to_csv(csv_file_path, index=False)
 
-    print(save_name, f' r-squared = {r2}, rmse = {rmse}, mae={mae}')
+    print(save_name, f' r-squared = {r2}, rmse = {rmse}, mae={mae}', 100*mae/np.mean(y_test))
