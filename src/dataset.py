@@ -78,18 +78,22 @@ def read_img(img_file, VI_list = None, suffix_list = None, is_vi_only:bool = Fal
         for vi in VI_list:
             if vi == 'ndvi':
                 ndvi = calculate_ndvi(src_data[4,:,:] , src_data[2,:,:])
+                ndvi = (ndvi+1.0)/2.0
                 vi_data = ndvi[np.newaxis,:,:]
                 
             elif vi == 'ndre':
                 ndre = calculate_ndre(src_data[4,:,:], src_data[3,:,:] )
+                ndre = (ndre+1.0)/2.0
                 vi_data = ndre[np.newaxis,:,:]
                 
             elif vi == 'gndvi':
                 gndvi = calculate_gndvi(src_data[4,:,:], src_data[1,:,:] )
+                gndvi = (gndvi+1.0)/2.0
                 vi_data = gndvi[np.newaxis,:,:]
                 
             elif vi == 'evi':
                 evi = calculate_evi(src_data[4,:,:], src_data[2,:,:], src_data[0,:,:] )
+                evi = (evi+1.0)/2.0
                 vi_data = evi[np.newaxis,:,:]
                 
             try:    
@@ -97,7 +101,8 @@ def read_img(img_file, VI_list = None, suffix_list = None, is_vi_only:bool = Fal
             except:
                 all_data = vi_data
     del src_data 
-    basename = img_file[:-14]
+    basename = os.path.basename(img_file)[:33]
+    basename = os.path.join(os.path.dirname(img_file), basename)
     if suffix_list:
         for suffix in suffix_list:
             with rasterio.open(basename + suffix) as src:

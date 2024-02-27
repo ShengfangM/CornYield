@@ -1,3 +1,6 @@
+import sys
+sys.path.append('c:/Zhou/Ma/Projects/CornYield/src')
+
 import numpy as np
 import os
 import rasterio
@@ -34,6 +37,8 @@ def resize_image(img, target_height, target_width):
 def interpolate_images(img_path, new_height, new_width, suffix):
     
     file_list = get_files_by_suffix(img_path, suffix)
+    file_list = [filename for filename in file_list if 'LWIR.tif' in filename]
+    
     in_path = os.path.dirname(img_path)
     in_subpath = os.path.basename(img_path)
     out_path = os.path.join(in_path + '_filled', in_subpath + '_filled')
@@ -55,12 +60,13 @@ def interpolate_images(img_path, new_height, new_width, suffix):
                          geotransform[3], new_pixel_height, geotransform[5])
         
         img_array = src.read().astype(np.float32)
+        img_array = img_array/100
         # 
 
         img_array[img_array<0] = np.nan
         resized_img = resize_image(img_array, new_height , new_width)
         
-        output_file = basename[:-4]+'_filled.tif'
+        output_file = basename[:-4]+'_filled2.tif'
         output_file = os.path.join(out_path, output_file)
         write_tiff(output_file, resized_img, src.crs, new_transform)
         
@@ -68,11 +74,12 @@ def interpolate_images(img_path, new_height, new_width, suffix):
 def interpolate_data_batch(img_path):
     sub_paths = get_subdirectories(img_path)
     for path in sub_paths:
-        interpolate_images(path, 80, 20, 'tif')
+        interpolate_images(path, 220, 55, 'tif')
         
 
 
 if __name__ == "__main__":
-    img_path = 'C:/Users/yutzhou/Desktop/Corn_Yield/UAV_Data_Extracted'
-    interpolate_data_batch(img_path)
-    
+    # img_path = 'C:/Users/yutzhou/Desktop/Corn_Yield/UAV_Data_Extracted'
+    # interpolate_data_batch(img_path)
+    img_path = 'C:/Users/yutzhou/Desktop/Corn_Yield/UAV_Data_Extracted\LIRF20220926_DOY269_extracted'
+    interpolate_images(img_path, 220, 55, 'tif')

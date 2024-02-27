@@ -15,6 +15,7 @@ import xgboost as xgb
 from matplotlib.font_manager import FontProperties
 
 import pickle
+import cv2
 
 import numpy as np
 import os
@@ -25,7 +26,8 @@ from dataset import get_ml_image
 def prepare_train_test_data(img_list, yield_pf, metadata=None, train_col='TRAIN_75', 
                             VI_list=None, suffix_list=None, vi_only=False):
     
-    yield_list = list(yield_pf['Yield_Bu_Ac'])
+    # yield_list = list(yield_pf['Yield_Bu_Ac'])
+    yield_list = list(yield_pf['Yield_MT_Ha'])
     train_indices = list(yield_pf[yield_pf[train_col] == 1].index)
     test_indices = list(yield_pf[yield_pf[train_col] == 0].index)
 
@@ -34,7 +36,6 @@ def prepare_train_test_data(img_list, yield_pf, metadata=None, train_col='TRAIN_
     
     train_images = get_ml_image(train_img_list, VI_list=VI_list, 
                                 suffix_list = suffix_list, is_vi_only=vi_only)
-    
     test_images = get_ml_image(test_img_list, VI_list=VI_list, 
                                 suffix_list = suffix_list, is_vi_only=vi_only)
     if metadata:
@@ -44,16 +45,13 @@ def prepare_train_test_data(img_list, yield_pf, metadata=None, train_col='TRAIN_
         train_images = [train_images, train_meta]
         test_images = [test_images, test_meta]
         
-        
-    
     return train_images, test_images, [yield_list[i] for i in train_indices], [yield_list[i] for i in test_indices]
     
     
 def ml_predict_yield(train_images, train_yields, test_images, modelname, out_name, out_path: str, is_Meta = False):
     
-    
     if modelname.upper() == 'LASSO':
-        model = Lasso(alpha=0.3)
+        model = Lasso(alpha=0.0007)
     elif modelname.upper() == 'LR':
         model = LinearRegression()
     elif modelname.upper() == 'RF':
@@ -139,10 +137,38 @@ class FlattenTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, y=None):
-        # use mean value of the image 
-        # X = np.nanmean(X,(2,3))
         return X.reshape((X.shape[0], -1))
+
+class FlattenMeanTransformer(BaseEstimator, TransformerMixin):
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        # use mean value of the image 
+        X = np.nanmean(X,(2,3))
+        return X.reshape((X.shape[0], -1))
+
+class FlattenHistTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, bins=50):
+        self.bins = bins
     
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        # use mean value of the image 
+        histograms = []
+        for image in X:
+            image_histograms = []
+            for band in range(image.shape[0]):  # Iterate over bands
+                hist = cv2.calcHist([image[band,:,:]], [0], None, [self.bins], [0, 1])
+                image_histograms.append(hist.flatten())
+            histograms.append(np.concatenate(image_histograms))  # Concatenate histograms from all bands
+        X = np.nanmean(X,(2,3))
+        X = np.concatenate((X , np.array(histograms)),axis=1)    
+        # print(X[0].shape)
+        return X.reshape((X.shape[0], -1))    
     
 class DataProcesser(BaseEstimator, TransformerMixin):
     
@@ -150,13 +176,23 @@ class DataProcesser(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, y=None):
-        # use mean value of the image 
-        # mean_image = np.nanmean(X[0],(2,3))
-        # array_1 = mean_image.reshape((mean_image.shape[0], -1))
         array_1 = X[0].reshape((X[0].shape[0], -1))
         array_2 = X[1]
+        # print(array_1[0], array_2[0])
         return  np.concatenate((array_1, np.array(array_2)),axis=1)
-        
+
+class DataMeanProcesser(BaseEstimator, TransformerMixin):
+    
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        # use mean value of the image 
+        mean_image = np.nanmean(X[0],(2,3))
+        array_1 = mean_image.reshape((mean_image.shape[0], -1))
+        array_2 = X[1]
+        # print(array_1[0], array_2[0])
+        return  np.concatenate((array_1, np.array(array_2)),axis=1)        
     
 def train_model_meta(model, train_images, train_yields, save_name:str = None, is_plot:bool = False):
     
@@ -190,6 +226,7 @@ def train_model(model, train_images, train_yields, save_name:str = None, is_plot
 
     pipe = Pipeline(steps=[("scaler", CustomScaler(MEAN,STD)),
                         ("flatten", FlattenTransformer()),
+                        # ("flatten", FlattenHistTransformer()),
                         ("classifier", model )
                         ])
     pipe.fit(train_images,train_yields)

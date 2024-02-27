@@ -28,7 +28,7 @@ irrigate_var={
 }
 
 CROP_TYPE = {
-    'pioneer':'P9998'
+    'P9998':'Pioneer'
 }
 CROP_IDS = {
     'P9998': 2,
