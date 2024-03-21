@@ -11,8 +11,9 @@ from dataset import get_imgfilelist_yield, select_data_and_yield_list, create_me
 from ml.ml_predict import plot_result_separate
 from dl.dl_dataset import CornDataset, MixedDataset
 from dl.model import (ResNetRegression_V00, ResNetRegression_V10, ViTRegression_V0, 
-                    ResNetRegression_V01, ResNetFNN_V00, ResNetFNN_V01, ResNetFNNTranfomer_V01,
-                    SpatialPyramidCNN, SpatialPyramidCNN_V2)
+                    ResNetRegression_V01, ResNetFNN_V00, ResNetFNN_V01,ResNetFNN_V2, ResNetFNN_V1,
+                    ResNetFNNTranfomer_V01, ResNetFNNTranfomer_V2,
+                    SpatialPyramidCNN, SpatialPyramidCNN_V1, SpatialPyramidCNN_V2)
 from dl.train import train_with_cross_validation, train, validate, data_transform, data_resize, data_transform_vit
 from plot_utils import plot_distinct_yields
 
@@ -130,7 +131,9 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         # model = ResNetRegression_V00(in_channel, 1, resname)
         # model = ViTRegression_V0(in_channel)
         # model = EfficientNetRegression(in_channel)
-        model = SpatialPyramidCNN_V2(in_channel, 1)
+        # model = SpatialPyramidCNN_V2(in_channel, 1, in_channel)
+        # model = SpatialPyramidCNN_V2(in_channel, 1, num_prior_feature= in_channel)
+        model = SpatialPyramidCNN_V1(in_channel, 1)
 
         # model = SpatialPyramidCNN(in_channel, 1)
 
@@ -152,7 +155,7 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         print()
 
         if is_save_model:
-            model_name = "path/model_pioneer_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_lr=" +str(lr)+ "_state.pth"
+            model_name = "path/model_" + crop_var[analyze_variety_id] +"_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_Epoch=" +str(num_epochs) + "_lr=" +str(lr)+ "_state.pth"
             torch.save(model.state_dict(), model_name)
 
         cur_time = time.time()
@@ -166,7 +169,7 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         name_tag = doy_name + ' ' + crop_var[analyze_variety_id] + ' ' + irrigate_var[analyze_irrigation_id] + ' '
         out_name = name_tag
         out_name = out_name + keyword[:-11] 
-        out_name = out_name + ' Resnet18 '
+        out_name = out_name + model.__class__.__name__ +' Resnet18 '
 
         yield_data = np.array(pioneer_yield_list)
         test_irrigate_data = np.array(yield_pf[yield_pf[train_col] == 0]['Irrigation_int'])
@@ -184,7 +187,7 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         result_df.to_csv(csv_file_path, index=False)
 
         title = name_tag + keyword[:-11].upper() + ' CNN'
-        plot_distinct_yields(np.array(test_truth), np.array(test_prediction), test_irrigate_data, test_variety_data, title, out_path+out_name)
+        plot_distinct_yields(np.array(test_truth)*0.06277, np.array(test_prediction)*0.06277, test_irrigate_data, test_variety_data, title, out_path+out_name)
 
 
 
@@ -214,7 +217,7 @@ def predict_yield_from_img_metadata(yield_file, img_path, weather_file, out_path
         doy_name = img_path[-23:-17]
         in_channel = sample_data[0].shape[0]
         # num_epochs = 120
-        num_epochs = 80
+        num_epochs = 100
         batch_size = 32
 
         # Initialize an empty list to store fold-wise performance
@@ -224,7 +227,10 @@ def predict_yield_from_img_metadata(yield_file, img_path, weather_file, out_path
         # model = CNNRegression(in_channel)
         # model = ResNetFNN(in_channel,9,1)
         # model = ResNetFNN_V01(in_channel,9,1,resname)
-        model = ResNetFNNTranfomer_V01(in_channel,9,1,resname)
+        # model = ResNetFNN_V1(in_channel,9,1,resname)
+        model = ResNetFNN_V2(in_channel,9,1,6, resname)
+        # model = ResNetFNNTranfomer_V01(in_channel,9,1,resname)
+        # model = ResNetFNNTranfomer_V2(in_channel,9,1,6, resname)
     
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(device)
@@ -244,7 +250,7 @@ def predict_yield_from_img_metadata(yield_file, img_path, weather_file, out_path
         # train_with_cross_validation(model, train_val_dataset, batch_size, num_epochs, optimizer, criterion, is_dual_data=True)
 
         if is_save_model:
-            model_name = "path/model_pioneer_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_lr=" +str(lr)+ "_state.pth"
+            model_name = "path/model_" + crop_var[analyze_variety_id] + "_meta(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_Epoch=" +str(num_epochs) + "_lr=" +str(lr)+ "_state.pth"
             # "path/model_" + model.__class__.__name__+ doy_name +"_Batch=" +str(batch_size) + "_state.pth"
             torch.save(model.state_dict(), model_name)
 
@@ -280,7 +286,7 @@ def predict_yield_from_img_metadata(yield_file, img_path, weather_file, out_path
         csv_file_path = out_path+out_name + ' metadata.csv'
         result_df.to_csv(csv_file_path, index=False)
 
-        plot_distinct_yields(np.array(test_truth), np.array(test_prediction), test_irrigate_data, test_variety_data, title, out_path+out_name+' metadata')
+        plot_distinct_yields(np.array(test_truth)*0.06277, np.array(test_prediction)*0.06277, test_irrigate_data, test_variety_data, title, out_path+out_name+' metadata')
 
 
 def predict_yield(yield_file, img_path, out_path, predict_model, 

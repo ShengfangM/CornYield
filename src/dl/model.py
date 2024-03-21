@@ -39,15 +39,15 @@ class ViTRegression_V0(nn.Module):
 ''' using resnet, MLP and SDPA'''
 
 class ResNetFNNTranfomerBase(nn.Module):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_feature_extractor):
+    def __init__(self, in_channel, num_metadata, num_class, resnet_feature_extractor):
         super(ResNetFNNTranfomerBase, self).__init__()
         self.feature_extract = resnet_feature_extractor
         num_resnet_features = self.feature_extract.num_features
         self.fc_metadata = nn.Linear(num_metadata, num_resnet_features)
-        self.fc_combined = nn.Linear(num_resnet_features + num_resnet_features, num_features)
-        self.fc = nn.Linear(num_resnet_features, num_features)
+        self.fc_combined = nn.Linear(num_resnet_features + num_resnet_features, num_class)
+        self.fc = nn.Linear(num_resnet_features, num_class)
         
-        self.num_heads = 8
+        self.num_heads = 2
 
     def forward(self, img, metadata):
         x_resnet = self.feature_extract(img)
@@ -58,7 +58,7 @@ class ResNetFNNTranfomerBase(nn.Module):
         # num_heads = 8
         # heads_per_dim = 64
         batch_size = x_resnet.size(0)
-        head_dim = 64
+        head_dim = 35
         # embed_dim = x_resnet.size(2)
         # head_dim = embed_dim // (self.num_heads * 3)
         query = x_metadata.view(batch_size, -1, self.num_heads, head_dim).transpose(1, 2)
@@ -75,8 +75,14 @@ class ResNetFNNTranfomerBase(nn.Module):
         return x_out
     
 class ResNetFNNTranfomer_V01(ResNetFNNTranfomerBase):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_name='resnet34'):
-        super(ResNetFNNTranfomer_V01, self).__init__(in_channel, num_metadata, num_features, ResNetFeatures_V01(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_metadata, num_class, resnet_name='resnet34'):
+        super(ResNetFNNTranfomer_V01, self).__init__(in_channel, num_metadata, num_class, 
+                                                     ResNetFeatures_V01(in_channel, 0, resnet_name=resnet_name))
+
+class ResNetFNNTranfomer_V2(ResNetFNNTranfomerBase):
+    def __init__(self, in_channel, num_metadata, num_class, num_extra_feature = 6, resnet_name='resnet18'):
+        super(ResNetFNNTranfomer_V2, self).__init__(in_channel, num_metadata, num_class, 
+                                                    CustomerFeatureExtraction(in_channel, 0, num_prior_feature = num_extra_feature, pretrained_net_name=resnet_name))
 
 # class EfficientNetRegression(nn.Module):
 #     def __init__(self, input_channels=5, efficientnet_variant='efficientnet_v2_s'):
@@ -100,14 +106,115 @@ class ResNetFNNTranfomer_V01(ResNetFNNTranfomerBase):
 #         return self.model(x)
 
 
+''' Only use the first layer of Resnet18 to extract feature'''
+class CustomerFeatureExtraction(nn.Module):
+    def __init__(self, in_channel, num_classes, num_prior_feature=6, pretrained_net_name = 'resnet18'):
+        super(CustomerFeatureExtraction, self).__init__()
+        
+        self.features = ResnetFeatureSubset(in_channel, num_classes)
+        # self.features = nn.Sequential(*list(resnet.children())[:-1])
+        # # Define the fully connected layers
+        self.fc1 = nn.Linear(in_channel, num_prior_feature - in_channel)  #
+        # Define the spatial pooling layers
+        self.pool0 = nn.AdaptiveAvgPool2d((2, 1))
+        self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
+        
+        self.num_features = 64 * 1+num_prior_feature
+        self.in_channel = in_channel
+        self.num_prior_feature = num_prior_feature
+        
+        
+    def forward(self, x):
+        
+        # Apply convolutional layers
+        x1 = self.pool1(x)
+        # if self.in_channel < self.standard_channel:
+        #     num_channels_to_replicate = num_output - in_channel
+        #     # print(num_channels_to_replicate)
+        #     x1_repeat = x1[:,-num_channels_to_replicate:,:,:]
+        #     # print(x1_repeat.size())
+        #     # print(x1.size())
+        #     x1 = torch.cat((x1, x1_repeat), dim=1)
+        x1 = x1.view(x1.size(0), -1)
+        if self.num_prior_feature > self.in_channel:
+            x1_2 = F.relu(self.fc1(x1))
+            x1 = torch.cat((x1, x1_2), dim=1)
+        
+        x2 = self.features(x)
+
+        # Concatenate the pooled features
+        x = torch.cat((x1, x2), dim=1)
+        # Flatten the features
+        x = x.view(x.size(0), -1)
+        
+        return x
+    
+    
+    
+class ResnetFeatureSubset(nn.Module):
+    def __init__(self, in_channel, num_classes, pretrained_net_name = 'resnet18'):
+        super(ResnetFeatureSubset, self).__init__()
+        
+        resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        # self.resnet = models.resnet18(pretrained=True)
+        if in_channel>3:
+            weight = resnet.conv1.weight.clone()
+            resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+            with torch.no_grad():
+                resnet.conv1.weight[:, :3] = weight
+                for ii in range(3, in_channel):
+                    resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
+        self.features = resnet
+        self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
+        
+        self.num_features = 64
+        # self.in_channel = in_channel
+        
+    def forward(self, x):
+        
+        x = self.features.conv1(x)
+        x = self.features.bn1(x)
+        x = self.features.relu(x)
+        x = self.features.maxpool(x)
+
+        x = self.features.layer1(x)
+        # Apply spatial pyramid pooling
+        x = self.pool1(x)
+        x = x.view(x.size(0), -1)
+        return x
+    
+class SpatialPyramidCNN_V1(nn.Module):
+    def __init__(self, in_channel, num_classes):
+        super(SpatialPyramidCNN_V1, self).__init__()
+        
+        self.features = ResnetFeatureSubset(in_channel, 0)
+        self.fc1 = nn.Linear(self.features.num_features, 1)
+        
+    def forward(self, x):
+        # Apply convolutional layers
+        x1 = self.features(x)
+        return self.fc1(x1)
+    
+class SpatialPyramidCNN_V2(nn.Module):
+    def __init__(self, in_channel, num_classes, num_prior_feature = 6):
+        super(SpatialPyramidCNN_V2, self).__init__()
+        
+        self.features = CustomerFeatureExtraction(in_channel, 0, num_prior_feature=num_prior_feature)
+        self.fc1 = nn.Linear(self.features.num_features, 1)
+        
+    def forward(self, x):
+        # Apply convolutional layers
+        x1 = self.features(x)
+        return self.fc1(x1)
+        
 '''modified ResNet model for regression
 '''
 # Base class for modified ResNet model for regression
 class ResNetRegressionBase(nn.Module):
-    def __init__(self, in_channel, num_features, resnet_feature_extractor):
+    def __init__(self, in_channel, num_classes, resnet_feature_extractor):
         super(ResNetRegressionBase, self).__init__()
         self.feature_extract = resnet_feature_extractor
-        self.fc = nn.Linear(self.feature_extract.num_features, num_features)
+        self.fc = nn.Linear(self.feature_extract.num_features, num_classes)
 
     def forward(self, img):
         x = self.feature_extract(img)
@@ -117,33 +224,35 @@ class ResNetRegressionBase(nn.Module):
 
 # Subclasses with different ResNet feature extractors
 class ResNetRegression_V00(ResNetRegressionBase):
-    def __init__(self, in_channel, num_features, resnet_name='resnet34'):
-        super(ResNetRegression_V00, self).__init__(in_channel, num_features, ResNetFeatures_V00(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_classes, resnet_name='resnet34'):
+        super(ResNetRegression_V00, self).__init__(in_channel, num_classes, ResNetFeatures_V00(in_channel, 0, resnet_name=resnet_name))
 
 class ResNetRegression_V01(ResNetRegressionBase):
-    def __init__(self, in_channel, num_features, resnet_name='resnet34'):
-        super(ResNetRegression_V01, self).__init__(in_channel, num_features, ResNetFeatures_V01(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_classes, resnet_name='resnet34'):
+        super(ResNetRegression_V01, self).__init__(in_channel, num_classes, ResNetFeatures_V01(in_channel, 0, resnet_name=resnet_name))
 
 class ResNetRegression_V10(ResNetRegressionBase):
-    def __init__(self, in_channel, num_features, resnet_name='resnet34'):
-        super(ResNetRegression_V10, self).__init__(in_channel, num_features, ResNetFeatures_V10(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_classes, resnet_name='resnet34'):
+        super(ResNetRegression_V10, self).__init__(in_channel, num_classes, ResNetFeatures_V10(in_channel, 0, resnet_name=resnet_name))
 
 class ResNetRegression_V11(ResNetRegressionBase):
-    def __init__(self, in_channel, num_features, resnet_name='resnet34'):
-        super(ResNetRegression_V11, self).__init__(in_channel, num_features, ResNetFeatures_V11(in_channel, 0, resnet_name=resnet_name))    
+    def __init__(self, in_channel, num_classes, resnet_name='resnet34'):
+        super(ResNetRegression_V11, self).__init__(in_channel, num_classes, ResNetFeatures_V11(in_channel, 0, resnet_name=resnet_name))    
 
 
 
-'''modified ResNet model for regression from image and metadata
+'''modified ResNet model and MLP for regression from image and metadata
 '''
 # Base class for combining ResNet and MLP for image and metadata
 class ResNetFNNBase(nn.Module):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_feature_extractor):
+    def __init__(self, in_channel, num_metadata, num_classes, resnet_feature_extractor):
         super(ResNetFNNBase, self).__init__()
         self.feature_extract = resnet_feature_extractor
         num_resnet_features = self.feature_extract.num_features
-        self.fc_metadata = nn.Linear(num_metadata, num_resnet_features // 8)
-        self.fc_combined = nn.Linear(num_resnet_features + num_resnet_features // 8, num_features)
+        # num_fc_features = num_resnet_features // 2
+        num_fc_features = 64
+        self.fc_metadata = nn.Linear(num_metadata, num_fc_features)
+        self.fc_combined = nn.Linear(num_resnet_features + num_fc_features, num_classes)
 
     def forward(self, img, metadata):
         x_resnet = self.feature_extract(img)
@@ -155,20 +264,28 @@ class ResNetFNNBase(nn.Module):
 
 # Subclasses with different ResNet feature extractors
 class ResNetFNN_V00(ResNetFNNBase):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_name='resnet34'):
-        super(ResNetFNN_V00, self).__init__(in_channel, num_metadata, num_features, ResNetFeatures_V00(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_metadata, num_classes, resnet_name='resnet34'):
+        super(ResNetFNN_V00, self).__init__(in_channel, num_metadata, num_classes, ResNetFeatures_V00(in_channel, 0, resnet_name=resnet_name))
 
 class ResNetFNN_V01(ResNetFNNBase):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_name='resnet34'):
-        super(ResNetFNN_V01, self).__init__(in_channel, num_metadata, num_features, ResNetFeatures_V01(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_metadata, num_classes, resnet_name='resnet34'):
+        super(ResNetFNN_V01, self).__init__(in_channel, num_metadata, num_classes, ResNetFeatures_V01(in_channel, 0, resnet_name=resnet_name))
 
 class ResNetFNN_V10(ResNetFNNBase):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_name='resnet34'):
-        super(ResNetFNN_V10, self).__init__(in_channel, num_metadata, num_features, ResNetFeatures_V10(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_metadata, num_classes, resnet_name='resnet34'):
+        super(ResNetFNN_V10, self).__init__(in_channel, num_metadata, num_classes, ResNetFeatures_V10(in_channel, 0, resnet_name=resnet_name))
 
 class ResNetFNN_V11(ResNetFNNBase):
-    def __init__(self, in_channel, num_metadata, num_features, resnet_name='resnet34'):
-        super(ResNetFNN_V11, self).__init__(in_channel, num_metadata, num_features, ResNetFeatures_V11(in_channel, 0, resnet_name=resnet_name))
+    def __init__(self, in_channel, num_metadata, num_classes, resnet_name='resnet34'):
+        super(ResNetFNN_V11, self).__init__(in_channel, num_metadata, num_classes, ResNetFeatures_V11(in_channel, 0, resnet_name=resnet_name))
+class ResNetFNN_V2(ResNetFNNBase):
+    def __init__(self, in_channel, num_metadata, num_classes, num_prior_feature = 1, resnet_name='resnet34'):
+        super(ResNetFNN_V2, self).__init__(in_channel, num_metadata, num_classes, 
+                                           CustomerFeatureExtraction(in_channel, 0, num_prior_feature= num_prior_feature, pretrained_net_name=resnet_name))
+class ResNetFNN_V1(ResNetFNNBase):
+    def __init__(self, in_channel, num_metadata, num_classes, resnet_name='resnet34'):
+        super(ResNetFNN_V1, self).__init__(in_channel, num_metadata, num_classes, 
+                                           ResnetFeatureSubset(in_channel, 0, pretrained_net_name=resnet_name))
 
 
 
@@ -596,59 +713,59 @@ class SpatialPyramidCNN(nn.Module):
         x = x.view(x.size(0), -1)
         
         return self.fc1(x)
-    
-    
-class SpatialPyramidCNN_V2(nn.Module):
-    def __init__(self, in_channel, num_classes):
-        super(SpatialPyramidCNN_V2, self).__init__()
-        
-        resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        # self.resnet = models.resnet18(pretrained=True)
-        if in_channel>3:
-            weight = resnet.conv1.weight.clone()
-            resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
-            with torch.no_grad():
-                resnet.conv1.weight[:, :3] = weight
-                for ii in range(3, in_channel):
-                    resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
-        self.features = resnet
-        # self.features = nn.Sequential(*list(resnet.children())[:-1])
-        
-        
-        # Define the fully connected layers
-        self.fc1 = nn.Linear(64 * 1+in_channel, 1)  # 13x13 is the output size after spatial pooling
-        
-        # Define the spatial pooling layers
-        self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
-        # self.pool2 = nn.AdaptiveAvgPool2d((2, 4))
-        # self.pool3 = nn.AdaptiveMaxPool2d((2, 4))
-        
-    def forward(self, x):
-        # Apply convolutional layers
-        x1 = self.pool1(x)
-        
-        x = self.features.conv1(x)
-        x = self.features.bn1(x)
-        x = self.features.relu(x)
-        x = self.features.maxpool(x)
 
-        x = self.features.layer1(x)
         
-        # Apply spatial pyramid pooling
-        x2 = self.pool1(x)
-        # x3 = self.pool2(x)
+# class SpatialPyramidCNN_V2(nn.Module):
+#     def __init__(self, in_channel, num_classes):
+#         super(SpatialPyramidCNN_V2, self).__init__()
         
-        # Flatten the features
-        x1 = x1.view(x1.size(0), -1)
-        x2 = x2.view(x2.size(0), -1)
-        # x3 = x3.view(x3.size(0), -1)
+#         resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+#         # self.resnet = models.resnet18(pretrained=True)
+#         if in_channel>3:
+#             weight = resnet.conv1.weight.clone()
+#             resnet.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)#here 4 indicates 4-channel input
+#             with torch.no_grad():
+#                 resnet.conv1.weight[:, :3] = weight
+#                 for ii in range(3, in_channel):
+#                     resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
+#         self.features = resnet
+#         # self.features = nn.Sequential(*list(resnet.children())[:-1])
         
-        # Concatenate the pooled features
-        x = torch.cat((x1, x2), dim=1)
-        # Flatten the features
-        x = x.view(x.size(0), -1)
         
-        return self.fc1(x)
+#         # Define the fully connected layers
+#         self.fc1 = nn.Linear(64 * 1+in_channel, 1)  # 13x13 is the output size after spatial pooling
+        
+#         # Define the spatial pooling layers
+#         self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
+#         # self.pool2 = nn.AdaptiveAvgPool2d((2, 4))
+#         # self.pool3 = nn.AdaptiveMaxPool2d((2, 4))
+        
+#     def forward(self, x):
+#         # Apply convolutional layers
+#         x1 = self.pool1(x)
+        
+#         x = self.features.conv1(x)
+#         x = self.features.bn1(x)
+#         x = self.features.relu(x)
+#         x = self.features.maxpool(x)
+
+#         x = self.features.layer1(x)
+        
+#         # Apply spatial pyramid pooling
+#         x2 = self.pool1(x)
+#         # x3 = self.pool2(x)
+        
+#         # Flatten the features
+#         x1 = x1.view(x1.size(0), -1)
+#         x2 = x2.view(x2.size(0), -1)
+#         # x3 = x3.view(x3.size(0), -1)
+        
+#         # Concatenate the pooled features
+#         x = torch.cat((x1, x2), dim=1)
+#         # Flatten the features
+#         x = x.view(x.size(0), -1)
+        
+#         return self.fc1(x)
     
 '''NN regression'''
 class FullyConnectedNN(nn.Module):

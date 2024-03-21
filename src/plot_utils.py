@@ -34,7 +34,7 @@ def plot_distinct_yields(y_test, y_pred, irrigate_data, variety_data, title, sav
     for j in np.sort(np.unique(variety_data)):
         marker=marker_list[j]
         for i in np.sort(np.unique(irrigate_data)):
-            marker=marker_list[i+1]
+            # marker=marker_list[i+1]
             color = color_list[i]
         # marker=marker_list[i]
             # color = color_list[j]
