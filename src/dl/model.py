@@ -164,7 +164,11 @@ class ResnetFeatureSubset(nn.Module):
                 resnet.conv1.weight[:, :3] = weight
                 for ii in range(3, in_channel):
                     resnet.conv1.weight[:, ii] = resnet.conv1.weight[:, 2]
-        self.features = resnet
+        self.conv1 = resnet.conv1
+        self.relu = resnet.relu
+        self.bn1 = resnet.bn1
+        self.maxpool = resnet.maxpool
+        self.layer1 = resnet.layer1
         self.pool1 = nn.AdaptiveAvgPool2d((1, 1))
         
         self.num_features = 64
@@ -172,12 +176,12 @@ class ResnetFeatureSubset(nn.Module):
         
     def forward(self, x):
         
-        x = self.features.conv1(x)
-        x = self.features.bn1(x)
-        x = self.features.relu(x)
-        x = self.features.maxpool(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
 
-        x = self.features.layer1(x)
+        x = self.layer1(x)
         # Apply spatial pyramid pooling
         x = self.pool1(x)
         x = x.view(x.size(0), -1)

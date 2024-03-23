@@ -155,8 +155,10 @@ def predict_yield_from_img(yield_file, img_path, out_path, is_save_model, is_tes
         print()
 
         if is_save_model:
-            model_name = "path/model_" + crop_var[analyze_variety_id] +"_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_Epoch=" +str(num_epochs) + "_lr=" +str(lr)+ "_state.pth"
-            torch.save(model.state_dict(), model_name)
+            # model_name = "path/model_" + crop_var[analyze_variety_id] +"_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_Epoch=" +str(num_epochs) + "_lr=" +str(lr)+ "_state.pth"
+            # torch.save(model.state_dict(), model_name)
+            model_name = "path/model_" + crop_var[analyze_variety_id] +"_img(nbands="+str(in_channel)+ ')_'+ str(doy_name) + "-"+model.__class__.__name__+'_'+resname+ "_Batch=" +str(batch_size) + "_Epoch=" +str(num_epochs) + "_lr=" +str(lr)+ "_model.pkl"
+            torch.save(model, model_name)
 
         cur_time = time.time()
         test_accuracy, test_prediction = validate(model, test_dataset, criterion, batch_size = batch_size, is_return_output = True)
